@@ -1,7 +1,7 @@
-import AdminNavbar from "../components/AdminNavbar";
 import AdminDesktopNavbar from "../components/AdminDesktopNavbar";
+import AdminNavbar from "../components/AdminNavbar";
 
-export default function AdminDashboard() {
+export default function AdminProfile() {
   return (
     <div className="min-h-dvh flex flex-col lg:flex-row text-sm sm:text-base">
       {/* navbar */}
