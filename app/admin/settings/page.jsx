@@ -1,7 +1,7 @@
-import AdminNavbar from "../components/AdminNavbar";
 import AdminDesktopNavbar from "../components/AdminDesktopNavbar";
+import AdminNavbar from "../components/AdminNavbar";
 
-export default function AdminDashboard() {
+export default function AdmiSystemSettings() {
   return (
     <div className="min-h-dvh flex flex-col lg:flex-row text-sm sm:text-base">
       {/* navbar */}
@@ -9,7 +9,7 @@ export default function AdminDashboard() {
       {/* main */}
       <div className="flex flex-1 flex-col gap-4">
         {/* desktop navbar */}
-        <AdminDesktopNavbar />
+        <AdminDesktopNavbar/>
       </div>
     </div>
   );
