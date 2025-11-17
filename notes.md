@@ -26,8 +26,18 @@ TO DO'S:
                 - implemented a mini overview of the total pending request for present day
                 - created table pending request for desktop device and change to cards for smaller device
                 - created a delete confirmation modal for rejecting pending request
+        3. admin-manual-topup-function
+            - created top-up form
+                - created a modal for searching user by name or RFID No.
+                - implemented top-up form function wherein when the're a selected user, the top-up form will show
+                - created a Top-up successful modal whenever the manual top-up is successful
+
+            - created manual top-up transactins/logs
+                - created a recent manual top-up transaction table for desktop and card button for mobile
+                - created and implemented a selected transaction modal to review full transaction
+
+
             
-            TODO:
-            - create and rendered Manual Top-up
-            - (to follow after creation of Manual Top-up)
+
+         
 

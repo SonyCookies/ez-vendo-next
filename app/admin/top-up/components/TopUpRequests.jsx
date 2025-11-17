@@ -267,7 +267,7 @@ export default function TopUpRequests() {
   );
 
   return (
-    <div className="flex flex-col xl:flex-1  gap-4">
+    <div className="flex flex-col xl:flex-1 gap-4">
       {/* Total Pending Request Card (unchanged) */}
       <div className="flex relative rounded-2xl bg-linear-to-r from-yellow-400 via-yellow-300 to-yellow-400 p-5">
         <div className="flex flex-1 flex-col gap-2 ">
@@ -310,7 +310,11 @@ export default function TopUpRequests() {
                 className={fieldClass}
               />
               {searchQuery.length > 0 && (
-                <button type="button" onClick={() => setSearchQuery("")} className="absolute px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-100/90 active:bg-gray-200 cursor-pointer transition-colors duration-150 top-2 right-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="absolute px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-100/90 active:bg-gray-200 cursor-pointer transition-colors duration-150 top-2 right-2 text-xs"
+                >
                   Clear
                 </button>
               )}
@@ -358,7 +362,7 @@ export default function TopUpRequests() {
                 <div className="flex items-center justif-center">
                   <div className="flex items-center gap-1 text-green-500">
                     <Plus className="size-5 sm:size-6" />
-                    <span className="text-xl sm:text-2xl font-semibold">
+                    <span className="text-base sm:text-lg font-semibold">
                       {item.amount.toFixed(2)}
                     </span>
                   </div>
