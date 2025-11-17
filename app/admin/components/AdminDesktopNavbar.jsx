@@ -93,7 +93,7 @@ export default function AdminDesktopNavbar() {
   };
 
   return (
-    <div className="bg-gray-800 p-4 xl:p-5 hidden lg:flex w-full items-center justify-between text-white">
+    <div className=" bg-gray-800 p-4 xl:p-5 hidden lg:flex w-full items-center justify-between text-white z-40">
       {/* left */}
       <span className="text-xl xl:text-2xl font-bold">{pageTitle}</span>
 
@@ -111,7 +111,7 @@ export default function AdminDesktopNavbar() {
         </button>
 
         {toggleNotification && (
-          <div className="absolute overflow-hidden text-black right-0 top-11 w-80 sm:w-96 bg-white border border-gray-300 rounded-2xl">
+          <div className="absolute overflow-hidden text-black right-0 top-11 w-80 sm:w-96 bg-white border border-gray-300 rounded-2xl z-10">
             {/* top */}
             <div className="flex items-center justify-between p-4 border-b border-gray-300">
               {/* left */}

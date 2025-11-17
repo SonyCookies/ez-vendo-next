@@ -1,7 +1,6 @@
 export default function AdminLogin() {
   // input fields className
-  const fieldClass =
-    "px-3 sm:px-4 py-2 border border-gray-300 outline-none rounded-lg focus:border-green-500 placeholder:text-gray-500 transition-colors duration-150";
+  const fieldClass = "px-3 sm:px-4 py-3 border border-gray-300 outline-none rounded-lg focus:border-green-500 placeholder:text-gray-500 transition-colors duration-150";
   return (
     <div className="min-h-dvh p-3 sm:p-4 flex items-center justify-center text-sm sm:text-base">
       <div className="container mx-auto w-full max-w-sm">

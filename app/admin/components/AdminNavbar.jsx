@@ -116,7 +116,7 @@ export default function AdminNavbar() {
   return (
     <>
       {/* navbar */}
-      <div className="bg-gray-900 px-3 py-4 sm:p-4 md:p-5 flex lg:flex-col items-center justify-between lg:justify-start lg:gap-6  text-white lg:w-72 xl:w-96">
+      <div className=" bg-gray-900 px-3 py-4 sm:p-4 md:p-5 flex lg:flex-col items-center justify-between lg:justify-start lg:gap-6  text-white lg:w-72 xl:w-96">
         {/* left (logo) */}
         <div className="flex items-center  gap-2 lg:w-full">
           {/* open sidebar */}
@@ -183,7 +183,7 @@ export default function AdminNavbar() {
         </div>
 
         {/* right (nav items) */}
-        <div className="hidden lg:flex flex-col w-full gap-5">
+        <div className="hidden lg:flex flex-col w-full gap-5 ">
           {/* menus */}
           <div className="flex flex-col w-full gap-2">
             {/* suptitle */}
@@ -265,7 +265,7 @@ export default function AdminNavbar() {
           </button>
 
           {toggleNotification && (
-            <div className="absolute overflow-hidden text-black right-0 top-11 w-80 sm:w-96 bg-white border border-gray-300 rounded-2xl">
+            <div className="absolute overflow-hidden text-black right-0 top-11 w-80 sm:w-96 bg-white border border-gray-300 rounded-2xl z-10">
               {/* top */}
               <div className="flex items-center justify-between p-4 border-b border-gray-300">
                 {/* left */}
@@ -325,7 +325,7 @@ export default function AdminNavbar() {
 
       {/* sidebar (smooth transition) */}
       <div
-        className={`fixed inset-0 bg-black/60 transition-opacity duration-300 ${
+        className={`fixed inset-0 bg-black/60 transition-opacity duration-300 z-50 ${
           toggleSidebar
             ? "opacity-100 pointer-events-auto"
             : "opacity-0 pointer-events-none"
