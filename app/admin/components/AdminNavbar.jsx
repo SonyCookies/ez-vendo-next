@@ -101,9 +101,9 @@ export default function AdminNavbar() {
     },
     {
       id: 2,
-      name: "System Settings",
+      name: "Billing Configuration",
       icon: Settings,
-      href: "/admin/settings",
+      href: "/admin/billing",
     },
   ];
 

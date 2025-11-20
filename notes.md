@@ -49,7 +49,19 @@ TO DO'S:
                     - added a mock data for Today, Yesterday, and Last & Days Transaction
                     - implemented a selected transaction modal
             - implemented filter function for All, Completed, and Rejected Transaction
+        5. admin-billing-function
+            - changed System settings to Billing Configuration
+            - created a Add Bill Rate Modal
+                - implemented global validations and validation under the inputs
+            - created a Current Bill Rates
+                - Modify
+                    - Created a modal for Modify Modal with predefine values on the input fields
+                - Delete
+                    - implemented a delete modal confirmation before the bill rate actually deleted
 
+
+
+            
 
 
         

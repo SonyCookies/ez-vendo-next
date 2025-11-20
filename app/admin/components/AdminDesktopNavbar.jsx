@@ -22,7 +22,7 @@ const PATHTITLES = {
   "/admin/top-up": "Top-up Management",
   "/admin/users": "List of Users",
   "/admin/profile": "Admin Profile",
-  "/admin/settings": "System Settings",
+  "/admin/billing": "Billing Configuration",
   "/admin/transactions": "Transaction Logs"
 };
 
