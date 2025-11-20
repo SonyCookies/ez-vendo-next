@@ -35,9 +35,21 @@ TO DO'S:
             - created manual top-up transactins/logs
                 - created a recent manual top-up transaction table for desktop and card button for mobile
                 - created and implemented a selected transaction modal to review full transaction
+        4. admin-transaction-page-function
+            - include only the completed and rejected transactions
+            - added Transaction Logs in Navbar
+            - transactions page:
+                - All Transactions
+                    - added a mock data for Today, Yesterday, and Last & Days Transaction
+                    - implemented a selected transaction modal
+                - Completed Transactions
+                    - added a mock data for Today, Yesterday, and Last & Days Transaction
+                    - implemented a selected transaction modal
+                - Rejected Transactions
+                    - added a mock data for Today, Yesterday, and Last & Days Transaction
+                    - implemented a selected transaction modal
+            - implemented filter function for All, Completed, and Rejected Transaction
 
 
-            
 
-         
-
+        

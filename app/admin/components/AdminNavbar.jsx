@@ -7,7 +7,7 @@ import {
   BanknoteArrowUp,
   BanknoteX,
   Bell,
-  CircleCheck,
+  Archive,
   CircleUserRound,
   HandCoins,
   LayoutDashboard,
@@ -84,6 +84,12 @@ export default function AdminNavbar() {
       name: "List of Users",
       icon: UsersRound,
       href: "/admin/users",
+    },
+    {
+      id: 4,
+      name: "Transaction Logs",
+      icon: Archive,
+      href: "/admin/transactions",
     },
   ];
   const settingsItems = [
