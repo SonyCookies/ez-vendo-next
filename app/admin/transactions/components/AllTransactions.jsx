@@ -180,7 +180,13 @@ export default function AllTransactions() {
       </div>
     </div>
   );
+// styling helpers
+const fieldClass = (err) =>
+  `px-3 sm:px-4 py-2 w-full border ${
+    err ? "border-red-500" : "border-gray-300"
+  } outline-none rounded-lg focus:border-green-500 placeholder:text-gray-500 transition-colors duration-150`;
 
+const labelClass = "text-xs sm:text-sm text-gray-500";
   // ------------------------------------------------------
   // MAIN RETURN
   // ------------------------------------------------------
