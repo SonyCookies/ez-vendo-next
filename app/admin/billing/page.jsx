@@ -215,7 +215,7 @@ export default function AdminBilling() {
                     <CirclePlus className="size-6 sm:size-7" />
                   </div>
                   <div className="flex flex-col text-center">
-                    <span className="text-base sm:text-lg font-semibold">
+                    <span className="text-base sm:text-lg font-semibold text-green-500">
                       Add Bill Rate
                     </span>
                     <span className="text-gray-500 text-xs sm:text-sm">
@@ -282,7 +282,7 @@ export default function AdminBilling() {
                     <button
                       type="button"
                       onClick={handleBillModal}
-                      className="rounded-lg w-full px-4 py-2 text-green-500 cursor-pointer  border border-green-500 hover:bg-green-500/90 hover:text-white active:text-white hover:border-green-500/90 active:bg-green-600 active:border-green-600 transition-colors duration-150"
+                      className="rounded-lg w-full px-4 py-2 text-red-500 cursor-pointer  border border-red-500 hover:bg-red-500/90 hover:text-white active:text-white hover:border-red-500/90 active:bg-red-600 active:border-red-600 transition-colors duration-150"
                     >
                       Discard
                     </button>
@@ -308,7 +308,7 @@ export default function AdminBilling() {
                     <CirclePlus className="size-6 sm:size-7" />
                   </div>
                   <div className="flex flex-col text-center">
-                    <span className="text-base sm:text-lg font-semibold">
+                    <span className="text-base sm:text-lg font-semibold text-green-500">
                       Modify Bill Rate
                     </span>
                     <span className="text-gray-500 text-xs sm:text-sm">
@@ -378,7 +378,7 @@ export default function AdminBilling() {
                     <button
                       type="button"
                       onClick={handleModifyClose}
-                      className="rounded-lg w-full px-4 py-2 text-green-500 cursor-pointer border border-green-500 hover:bg-green-500/90 hover:text-white active:text-white transition-colors duration-150"
+                      className="rounded-lg w-full px-4 py-2 text-red-500 cursor-pointer border border-red-500 hover:bg-red-500/90 hover:text-white active:text-white transition-colors duration-150"
                     >
                       Discard
                     </button>
