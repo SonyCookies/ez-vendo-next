@@ -58,7 +58,12 @@ TO DO'S:
                     - Created a modal for Modify Modal with predefine values on the input fields
                 - Delete
                     - implemented a delete modal confirmation before the bill rate actually deleted
+        6. admin-users-function
+            - 
 
+
+
+          
 
 
             
