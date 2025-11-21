@@ -28,17 +28,13 @@ export default function AdminTopUp() {
         <AdminDesktopNavbar />
 
         <div className="flex flex-col xl:flex-row px-3 py-4 sm:p-4 md:p-5 gap-4 xl:gap-5">
-
           <div className="flex xl:flex-col xl:w-72 items-center gap-2">
-            <div className="relative w-full">
-              <button
-                onClick={() => setActiveTab("requests")}
-                className={getButtonClass("requests")}
-              >
-                Top-up Requests
-              </button>
-              <div className="flex size-2.5 rounded-full absolute -right-0.5 -top-0.5 bg-red-500"></div>
-            </div>
+            <button
+              onClick={() => setActiveTab("requests")}
+              className={getButtonClass("requests")}
+            >
+              Top-up Requests
+            </button>
 
             <button
               onClick={() => setActiveTab("manual")}
