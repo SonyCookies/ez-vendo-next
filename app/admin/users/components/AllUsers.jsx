@@ -10,6 +10,8 @@ import {
   X,
 } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
+import { collection, getDocs, updateDoc, doc } from "firebase/firestore";
+import { db } from "../../../../firebase";
 
 export default function AllUsers() {
   // Pagination
@@ -20,80 +22,77 @@ export default function AllUsers() {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
 
-  // SELECTED USER MODAL  // ADDED
+  // SELECTED USER MODAL
   const [selectedUser, setSelectedUser] = useState(null);
 
-  // MOCK USERS
-  const mockUsers = [
-    {
-      id: 1,
-      name: "Edward Gatbonton",
-      rfid: 1234567890,
-      status: "active",
-      created: "11/19/2025 12:24:02 AM",
-      bg: "bg-green-500",
-      text: "text-green-500",
+  // USERS DATA
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-      // Personal info
-      birthday: "September 26, 2003",
-      age: 22,
-      gender: "Male",
-      phone: "09162561433",
-      email: "edwardcastillogatbonton@gmail.com",
-      address: "Poblacion 4, Victoria, Oriental Mindoro",
-    },
-    {
-      id: 2,
-      name: "Sonny Sarcia",
-      rfid: 1234567890,
-      status: "active",
-      created: "11/19/2025 12:24:02 AM",
-      bg: "bg-green-500",
-      text: "text-green-500",
+  // Fetch users from Firestore
+  useEffect(() => {
+    async function fetchUsers() {
+      setLoading(true);
+      setError("");
 
-      birthday: "August 2, 2002",
-      age: 23,
-      gender: "Male",
-      phone: "09123456789",
-      email: "sonny@gmail.com",
-      address: "Bayanan, Calapan City",
-    },
+      try {
+        const querySnapshot = await getDocs(collection(db, "users"));
+        const usersData = querySnapshot.docs.map(async (docSnapshot) => {
+          const userData = docSnapshot.data();
+          const updatedFields = {};
 
-    {
-      id: 3,
-      name: "Kim Anonuevo",
-      rfid: 1234567890,
-      status: "active",
-      created: "11/19/2025 12:24:02 AM",
-      bg: "bg-green-500",
-      text: "text-green-500",
+          // Check and set default values for missing fields
+          if (!userData.fullName) {
+            updatedFields.fullName = "N/A";
+          }
+          if (!userData.status) {
+            updatedFields.status = "active";
+          }
+          if (!userData.birthday) {
+            updatedFields.birthday = "N/A";
+          }
+          if (!userData.age) {
+            updatedFields.age = "N/A";
+          }
+          if (!userData.gender) {
+            updatedFields.gender = "N/A";
+          }
+          if (!userData.phone) {
+            updatedFields.phone = "N/A";
+          }
+          if (!userData.address) {
+            updatedFields.address = "N/A";
+          }
 
-      birthday: "October 13, 2003",
-      age: 22,
-      gender: "Male",
-      phone: "09123451111",
-      email: "kim@gmail.com",
-      address: "San Jose, Mindoro",
-    },
-    {
-      id: 4,
-      name: "Cy Kean Angel Dave Perjes",
-      rfid: 523689412,
-      status: "blocked",
-      created: "11/19/2025 12:24:02 AM",
-      bg: "bg-red-500",
-      text: "text-red-500",
+          // Update Firestore document if there are missing fields
+          if (Object.keys(updatedFields).length > 0) {
+            const userDocRef = doc(db, "users", docSnapshot.id);
+            await updateDoc(userDocRef, updatedFields);
+          }
 
-      birthday: "October 13, 2003",
-      age: 22,
-      gender: "Male",
-      phone: "09123451111",
-      email: "cyperjest@gmail.com",
-      address: "San Jose, Mindoro",
-    },
-  ];
+          return {
+            id: docSnapshot.id,
+            ...userData,
+            ...updatedFields, // Merge updated fields with existing data
+          };
+        });
 
-  // DEBOUNCE LOGIC  // ADDED
+        // Resolve all promises and set users state
+        const resolvedUsers = await Promise.all(usersData);
+        setUsers(resolvedUsers);
+      } catch (err) {
+        console.error("Failed to fetch users:", err);
+        setError("Failed to load users. Please try again later.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchUsers();
+  }, []);
+
+  // DEBOUNCE LOGIC
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedQuery(searchQuery);
@@ -107,18 +106,18 @@ export default function AllUsers() {
       ? searchQuery.trim().toLowerCase()
       : debouncedQuery.trim().toLowerCase();
 
-  // REAL-TIME FILTERING  // FIXED
+  // REAL-TIME FILTERING
   const filteredItems = useMemo(() => {
-    if (!effectiveQuery) return mockUsers;
+    if (!effectiveQuery) return users;
 
-    return mockUsers.filter((item) => {
+    return users.filter((user) => {
       const q = effectiveQuery;
       return (
-        item.name.toLowerCase().startsWith(q) ||
-        item.rfid.toString().startsWith(q)
+        user.fullName.toLowerCase().startsWith(q) ||
+        user.rfidCardId?.toLowerCase().startsWith(q)
       );
     });
-  }, [effectiveQuery]);
+  }, [effectiveQuery, users]);
 
   // Pagination still works while searching
   const totalPages = Math.max(
@@ -135,20 +134,41 @@ export default function AllUsers() {
   const fieldClass =
     "px-3 sm:px-4 py-3 w-full border border-gray-300 outline-none rounded-lg focus:border-green-500 placeholder:text-gray-500 transition-colors duration-150 pe-20 sm:pe-21";
 
-  // CLEAR SEARCH HANDLER  // ADDED
+  // CLEAR SEARCH HANDLER
   const handleClear = () => {
     setSearchQuery("");
     setDebouncedQuery("");
     setCurrentPage(1);
   };
 
-  // OPEN MODAL  // ADDED
+  // OPEN MODAL
   const openUserModal = (user) => {
     setSelectedUser(user);
   };
 
-  // CLOSE MODAL  // ADDED
+  // CLOSE MODAL
   const closeUserModal = () => setSelectedUser(null);
+
+  // Function to toggle user status
+  const toggleUserStatus = async (user) => {
+    try {
+      const newStatus = user.status === "active" ? "blacklisted" : "active";
+      const userDocRef = doc(db, "users", user.id);
+
+      // Update Firestore document
+      await updateDoc(userDocRef, { status: newStatus });
+
+      // Update local state
+      setUsers((prevUsers) =>
+        prevUsers.map((u) =>
+          u.id === user.id ? { ...u, status: newStatus } : u
+        )
+      );
+    } catch (err) {
+      console.error("Failed to update user status:", err);
+      alert("Failed to update user status. Please try again.");
+    }
+  };
 
   const EmptyState = () => (
     <div className="flex flex-col gap-2 items-center justify-center p-5 rounded-2xl border border-dashed border-gray-300 bg-gray-100 lg:bg-gray-50 w-full">
@@ -166,20 +186,28 @@ export default function AllUsers() {
     </div>
   );
 
+  if (loading) {
+    return <div>Loading users...</div>;
+  }
+
+  if (error) {
+    return <div className="text-red-500">{error}</div>;
+  }
+
   return (
     <div className="flex flex-col xl:flex-1 gap-4">
-      {/* Total Users (unchanged) */}
+      {/* Total Users */}
       <div className="flex relative rounded-2xl bg-linear-to-r from-green-500 via-green-400 to-green-500 p-5 text-white">
         <div className="flex flex-1 flex-col gap-2 ">
           <span className="text-2xl sm:text-3xl font-bold">
-            {mockUsers.length}
+            {users.length}
           </span>
           <div className="flex flex-col">
             <span className="text-sm sm:text-base font-semibold text-white">
               Total Users
             </span>
             <span className="text-xs text-gray-100">
-              As of November 15, 2025
+              As of {new Date().toLocaleDateString()}
             </span>
           </div>
         </div>
@@ -209,7 +237,6 @@ export default function AllUsers() {
                 }}
               />
 
-              {/* CLEAR BUTTON SHOWS ONLY IF THERE IS TEXT -- ADDED */}
               {searchQuery.length > 0 && (
                 <button
                   type="button"
@@ -232,26 +259,26 @@ export default function AllUsers() {
           <div className="flex xl:hidden flex-col gap-3">
             {filteredItems.length === 0 && <EmptyState />}
 
-            {paginatedItems.map((u) => (
+            {paginatedItems.map((user) => (
               <button
-                key={u.id}
+                key={user.id}
                 onClick={() => openUserModal(u)}
                 className="p-5 cursor-pointer rounded-2xl border border-gray-300 flex items-center hover:bg-gray-50 active:bg-gray-100 transition-colors duration-150"
               >
                 <div className="flex flex-1 text-left flex-col gap-3">
                   <div className="flex flex-col">
-                    <span className="font-semibold">{u.name}</span>
+                    <span className="font-semibold">{user.fullName}</span>
                     <span className="text-xs sm:text-sm text-gray-500">
-                      RFID No: {u.rfid}
+                      RFID No: {user.rfidCardId}
                     </span>
                   </div>
                 </div>
 
                 <div className="flex items-center">
                   <div
-                    className={`flex items-center px-4 py-1 rounded-full text-xs text-white ${u.bg}`}
+                    className={`flex items-center px-4 py-1 rounded-full text-xs text-white ${user.bg}`}
                   >
-                    <span>{u.status}</span>
+                    <span>{user.status}</span>
                   </div>
                 </div>
               </button>
@@ -269,30 +296,37 @@ export default function AllUsers() {
                     <th className="px-6 py-3 font-medium">Name</th>
                     <th className="px-6 py-3 font-medium">RFID No.</th>
                     <th className="px-6 py-3 font-medium">Status</th>
-                    <th className="px-6 py-3 font-medium">Date Created</th>
+                    <th className="px-6 py-3 font-medium">Date Registered</th>
                     <th className="px-6 py-3 font-medium">Action</th>
                   </tr>
                 </thead>
 
                 <tbody>
-                  {paginatedItems.map((u) => (
-                    <tr key={u.id} className="border-b border-gray-300">
-                      <td className="px-6 py-4">{u.name}</td>
-                      <td className="px-6 py-4">{u.rfid}</td>
+                  {paginatedItems.map((user) => (
+                    <tr key={user.id} className="border-b border-gray-300">
+                      <td className="px-6 py-4">{user.fullName}</td>
+                      <td className="px-6 py-4">{user.rfidCardId}</td>
                       <td className="px-6 py-4">
                         <div className="flex">
                           <div
-                            className={`text-xs px-4 py-1 rounded-full text-white ${u.bg}`}
+                            className={`text-xs px-4 py-1 rounded-full text-white ${
+                              user.status === "active"
+                                ? "bg-green-500"
+                                : "bg-red-500"
+                            }`}
                           >
-                            {u.status}
+                            {user.status}
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4">{u.created}</td>
+                      <td className="px-6 py-4">
+                        {user.registeredAt?.toDate().toLocaleDateString() ||
+                          "N/A"}
+                      </td>
 
                       <td className="px-6 py-4">
                         <button
-                          onClick={() => openUserModal(u)}
+                          onClick={() => openUserModal(user)}
                           className="rounded-lg px-4 py-1 bg-green-500 text-white text-xs cursor-pointer transition-colors duration-150 hover:bg-green-500/90 active:bg-green-600"
                         >
                           View
@@ -354,27 +388,33 @@ export default function AllUsers() {
             {/* HEADER */}
             <div className="flex flex-col gap-4 items-center justify-center py-2">
               <div
-                className={`rounded-full p-3 text-white bg-green-500 inset-shadow-green-500 ${selectedUser.bg}`}
+                className={`rounded-full p-3 text-white bg-green-500 inset-shadow-green-500 ${
+                  selectedUser.status === "active"
+                    ? "bg-green-500"
+                    : "bg-red-500"
+                }`}
               >
                 <UserRound className="size-6 sm:size-7" />
               </div>
 
               <div className="flex flex-col text-center">
-                <span
-                  className={`text-base sm:text-lg font-semibold  ${selectedUser.text}`}
-                >
-                  {selectedUser.name}
+                <span className="text-base sm:text-lg font-semibold">
+                  {selectedUser.fullName}
                 </span>
 
                 <span className="text-gray-500 text-xs sm:text-sm">
-                  RFID No. {selectedUser.rfid}
+                  RFID No. {selectedUser.rfidCardId}
                 </span>
 
                 <div className="flex flex-col items-center justify-center gap-1 pt-3">
                   <span className="text-xs text-gray-500">Status</span>
 
                   <div
-                    className={`text-xs px-4 py-1 rounded-full text-white ${selectedUser.bg}`}
+                    className={`text-xs px-4 py-1 rounded-full text-white ${
+                      selectedUser.status === "active"
+                        ? "bg-green-500"
+                        : "bg-red-500"
+                    }`}
                   >
                     {selectedUser.status}
                   </div>
@@ -395,7 +435,7 @@ export default function AllUsers() {
                       Birthday
                     </span>
                     <span className="font-semibold text-sm sm:text-base">
-                      {selectedUser.birthday}
+                      {selectedUser.birthday || "N/A"}
                     </span>
                   </div>
 
@@ -404,7 +444,7 @@ export default function AllUsers() {
                       Age
                     </span>
                     <span className="font-semibold text-sm sm:text-base">
-                      {selectedUser.age}
+                      {selectedUser.age || "N/A"}
                     </span>
                   </div>
 
@@ -413,7 +453,7 @@ export default function AllUsers() {
                       Gender
                     </span>
                     <span className="font-semibold text-sm sm:text-base">
-                      {selectedUser.gender}
+                      {selectedUser.gender || "N/A"}
                     </span>
                   </div>
 
@@ -422,7 +462,7 @@ export default function AllUsers() {
                       Phone
                     </span>
                     <span className="font-semibold text-sm sm:text-base">
-                      {selectedUser.phone}
+                      {selectedUser.phone || "N/A"}
                     </span>
                   </div>
 
@@ -440,28 +480,35 @@ export default function AllUsers() {
                       Address
                     </span>
                     <span className="font-semibold text-sm sm:text-base truncate">
-                      {selectedUser.address}
+                      {selectedUser.address || "N/A"}
                     </span>
                   </div>
 
                   <div className="col-span-4 flex flex-col p-3 rounded-lg border border-gray-300">
                     <span className="text-gray-500 text-xs sm:text-sm">
-                      Date Created
+                      Date Registered
                     </span>
                     <span className="font-semibold text-sm sm:text-base">
-                      {selectedUser.created}
+                      {selectedUser.registeredAt?.toDate().toLocaleDateString() ||
+                        "N/A"}
                     </span>
                   </div>
                 </div>
               </div>
             </div>
 
-            {selectedUser.status === "blocked" ? (
-              <button className="bg-green-500 px-4 py-2 rounded-lg text-white hover:bg-green-500/90 active:bg-green-600 transition-colors duration-150 cursor-pointer mb-2">
+            {selectedUser.status === "blacklisted" ? (
+              <button
+                onClick={() => toggleUserStatus(selectedUser)}
+                className="bg-green-500 px-4 py-2 rounded-lg text-white hover:bg-green-500/90 active:bg-green-600 transition-colors duration-150 cursor-pointer mb-2"
+              >
                 Unblock user
               </button>
             ) : (
-              <button className="bg-red-500 px-4 py-2 rounded-lg text-white hover:bg-red-500/90 active:bg-red-600 transition-colors duration-150 cursor-pointer mb-2">
+              <button
+                onClick={() => toggleUserStatus(selectedUser)}
+                className="bg-red-500 px-4 py-2 rounded-lg text-white hover:bg-red-500/90 active:bg-red-600 transition-colors duration-150 cursor-pointer mb-2"
+              >
                 Block user
               </button>
             )}
