@@ -5,8 +5,12 @@ import Link from "next/link";
 import AdminDesktopNavbar from "../components/AdminDesktopNavbar";
 import AdminNavbar from "../components/AdminNavbar";
 import { useEffect, useState } from "react";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { db, auth, onAuthStateChanged } from "../../../firebase"; // Adjust path if needed
+import { useRouter } from "next/navigation";
 
 export default function AdminEditProfile() {
+  const router = useRouter();
   const [deleteModal, setDeleteModal] = useState(false);
 
   // IMAGE UPLOAD
@@ -16,15 +20,14 @@ export default function AdminEditProfile() {
   const [successModal, setSuccessModal] = useState(false);
 
   // PROFILE FIELDS
-  const [name, setName] = useState("Edward Gatbonton");
-  const [birthday, setBirthday] = useState("2003-09-26");
-  const [age, setAge] = useState(22);
-  const [gender, setGender] = useState("Female");
-  const [phone, setPhone] = useState("09068108693");
-  const [email, setEmail] = useState("edwardcastillogatbonton@gmail.com");
-  const [address, setAddress] = useState(
-    "Poblacion 4, Victoria, Oriental Mindoro"
-  );
+  const [name, setName] = useState("");
+  const [birthday, setBirthday] = useState("");
+  const [age, setAge] = useState(null);
+  const [gender, setGender] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [address, setAddress] = useState("");
+  const [adminId, setAdminId] = useState(""); // Add state for adminId
 
   // Delete modal fields (unchanged)
   const [password, setPassword] = useState("");
@@ -33,7 +36,54 @@ export default function AdminEditProfile() {
   const [confirmError, setConfirmError] = useState("");
   const [globalError, setGlobalError] = useState("");
 
-  // Auto-calc age from birthday
+  // Fetch the logged-in admin's ID dynamically
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        // User is signed in, set adminId
+        setAdminId(user.uid);
+      } else {
+        // User is signed out, redirect to login
+        router.replace("/admin/login");
+      }
+    });
+
+    return () => unsubscribe(); // Cleanup listener on unmount
+  }, []);
+
+  useEffect(() => {
+    async function fetchAdminData() {
+      try {
+        const user = auth.currentUser; // Get the currently logged-in user
+        if (!user) {
+          console.error("No logged-in user found");
+          return;
+        }
+
+        const adminId = user.uid; // Use the logged-in user's UID as the admin ID
+        setAdminId(adminId); // Set adminId state
+
+        const docRef = doc(db, "admins", adminId);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setName(data.name || "");
+          setBirthday(data.birthday || "");
+          setGender(data.gender || "");
+          setPhone(data.phone || "");
+          setEmail(data.email || "");
+          setAddress(data.address || "");
+        }
+      } catch (error) {
+        console.error("Failed to fetch admin data", error);
+      }
+    }
+
+    fetchAdminData();
+  }, []);
+
+  // Dynamically calculate age
   useEffect(() => {
     if (!birthday) return;
     const birthDate = new Date(birthday);
@@ -94,26 +144,29 @@ export default function AdminEditProfile() {
     return valid;
   };
 
-  const handleSaveChanges = () => {
-    console.log("Saving data...");
-    console.log({
-      name,
-      birthday,
-      age,
-      gender,
-      phone,
-      email,
-      address,
-      selectedImage,
-    });
+  // Added error handling to display user-friendly messages
+  const handleSaveChanges = async () => {
+    setSuccessModal(false);
+    try {
+      const docRef = doc(db, "admins", adminId);
+      await setDoc(
+        docRef,
+        {
+          name,
+          birthday,
+          gender,
+          phone,
+          email,
+          address,
+        },
+        { merge: true } // Use merge to update or create the document
+      );
 
-    // Show modal
-    setSuccessModal(true);
-
-    // Redirect after 3 seconds
-    setTimeout(() => {
-      window.location.href = "/admin/profile"; // <-- change route if needed
-    }, 3000);
+      setSuccessModal(true);
+    } catch (error) {
+      console.error("Failed to save changes", error);
+      setGlobalError("Failed to save changes. Please try again."); // Display error message
+    }
   };
 
   const deleteDisabled = password.trim() === "" || confirmText.trim() === "";
@@ -259,7 +312,7 @@ export default function AdminEditProfile() {
                       Admin ID
                     </span>
                     <input
-                      value="123456"
+                      value={adminId}
                       disabled
                       className="font-semibold outline-none border border-gray-300 px-4 py-2 w-full rounded-lg truncate bg-gray-50"
                     />

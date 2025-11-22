@@ -10,9 +10,14 @@ import {
 import Link from "next/link";
 import AdminDesktopNavbar from "../components/AdminDesktopNavbar";
 import AdminNavbar from "../components/AdminNavbar";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { auth, db, onAuthStateChanged } from "../../../firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { useRouter } from "next/navigation";
 
 export default function AdminBilling() {
+  const router = useRouter();
+
   const [deleteModal, setDeleteModal] = useState(false);
 
   const [password, setPassword] = useState("");
@@ -21,6 +26,64 @@ export default function AdminBilling() {
   const [passwordError, setPasswordError] = useState("");
   const [confirmError, setConfirmError] = useState("");
   const [globalError, setGlobalError] = useState("");
+
+  const [adminId, setAdminId] = useState("");
+  const [name, setName] = useState("");
+  const [birthday, setBirthday] = useState("");
+  const [age, setAge] = useState(null);
+  const [gender, setGender] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [address, setAddress] = useState("");
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // User is signed in, set adminId and fetch data
+        setAdminId(user.uid);
+
+        try {
+          const docRef = doc(db, "admins", user.uid);
+          const docSnap = await getDoc(docRef);
+
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setName(data.name || "");
+            setBirthday(data.birthday || "");
+            setGender(data.gender || "");
+            setPhone(data.phone || "");
+            setEmail(data.email || "");
+            setAddress(data.address || "");
+          }
+        } catch (error) {
+          console.error("Failed to fetch admin data", error);
+        }
+      } else {
+        // User is signed out, redirect to login
+        router.replace("/admin/login");
+      }
+    });
+
+    return () => unsubscribe(); // Cleanup listener on unmount
+  }, []);
+
+  useEffect(() => {
+    if (!birthday) return;
+    const birthDate = new Date(birthday);
+    const today = new Date();
+
+    let newAge = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+
+    if (
+      monthDiff < 0 ||
+      (monthDiff === 0 && today.getDate() < birthDate.getDate())
+    ) {
+      newAge--;
+    }
+
+    setAge(newAge);
+  }, [birthday]);
 
   const handleDeleteModal = () => {
     setDeleteModal((prev) => !prev);
@@ -83,10 +146,10 @@ export default function AdminBilling() {
                 {/* name and admin Id */}
                 <div className="flex flex-col text-center">
                   <span className="font-semibold text-base sm:text-lg">
-                    Edward Gatbonton
+                    {name}
                   </span>
                   <span className="text-gray-500 text-xs sm:text-sm">
-                    Admin ID: 123456789
+                    Admin ID: {adminId}
                   </span>
                 </div>
                 {/* btn */}
@@ -112,7 +175,7 @@ export default function AdminBilling() {
                       Birthday
                     </span>
                     <span className="font-semibold text-sm sm:text-base">
-                      September 26, 2003
+                      {birthday}
                     </span>
                   </div>
 
@@ -121,7 +184,7 @@ export default function AdminBilling() {
                       Age
                     </span>
                     <span className="font-semibold text-sm sm:text-base">
-                      22
+                      {age}
                     </span>
                   </div>
 
@@ -130,7 +193,7 @@ export default function AdminBilling() {
                       Gender
                     </span>
                     <span className="font-semibold text-sm sm:text-base">
-                      Female
+                      {gender}
                     </span>
                   </div>
 
@@ -139,7 +202,7 @@ export default function AdminBilling() {
                       Phone
                     </span>
                     <span className="font-semibold text-sm sm:text-base">
-                      09068108693
+                      {phone}
                     </span>
                   </div>
 
@@ -148,7 +211,7 @@ export default function AdminBilling() {
                       Email
                     </span>
                     <span className="font-semibold text-sm sm:text-base">
-                      edwardcastillogatbonton@gmail.com
+                      {email}
                     </span>
                   </div>
 
@@ -157,7 +220,7 @@ export default function AdminBilling() {
                       Address
                     </span>
                     <span className="font-semibold text-sm sm:text-base truncate">
-                      Poblacion 4, Victoria, Oriental Mindoro
+                      {address}
                     </span>
                   </div>
 
