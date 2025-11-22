@@ -13,12 +13,15 @@ import {
   X,
 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { db } from "../../../../firebase";
+import { collection, getDocs, query, where, doc, getDoc, updateDoc, increment, addDoc, serverTimestamp, orderBy } from "firebase/firestore";
 
 export default function ManualTopUp() {
   const [searchModal, setSearchModal] = useState(false);
   const [query, setQuery] = useState("");
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
+  const [searchLoading, setSearchLoading] = useState(false);
 
   // Form state
   const [amount, setAmount] = useState("");
@@ -28,16 +31,12 @@ export default function ManualTopUp() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [transactions, setTransactions] = useState([]);
   const [selectedTransaction, setSelectedTransaction] = useState(null);
+  const [processing, setProcessing] = useState(false);
+  const [transactionsLoading, setTransactionsLoading] = useState(true);
 
   // Validation errors
   const [errors, setErrors] = useState({});
   const [showGlobalError, setShowGlobalError] = useState(false);
-
-  const mockUser = [
-    { id: 1, name: "Edward Gatbonton", rfid: 123456789, balance: 50 },
-    { id: 2, name: "Sonny Sarcia", rfid: 927491027, balance: 120 },
-    { id: 3, name: "Kim Anonuevo", rfid: 595134795, balance: 75 },
-  ];
 
   const paymentMethod = [
     { id: 1, method: "Cash" },
@@ -47,29 +46,175 @@ export default function ManualTopUp() {
     { id: 5, method: "GoTyme" },
   ];
 
-  const generateTransactionId = () => {
-    const date = new Date();
-    const mm = String(date.getMonth() + 1).padStart(2, "0");
-    const dd = String(date.getDate()).padStart(2, "0");
-    const yy = String(date.getFullYear()).slice(-2);
-    const rand = Math.floor(100 + Math.random() * 900);
-    return `T-${mm}${dd}${yy}-${rand}`;
+  // Format transaction ID (EZ-****** where ****** is first 6 chars of document ID)
+  const formatTransactionId = (documentId) => {
+    if (!documentId) return "EZ-000000";
+    const firstSix = documentId.substring(0, 6).toUpperCase();
+    return `EZ-${firstSix}`;
   };
 
-  // realtime search
+  // Format date time
+  const formatDateTime = (timestamp) => {
+    if (!timestamp) return "";
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    if (isNaN(date.getTime())) return "";
+    
+    const options = { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    };
+    return date.toLocaleString('en-US', options);
+  };
+
+  // Fetch all manual top-up transactions from Firestore
   useEffect(() => {
-    if (!query.trim()) {
-      setFilteredUsers([]);
-      return;
-    }
+    const fetchManualTopUps = async () => {
+      try {
+        setTransactionsLoading(true);
+        const manualTopUpRef = collection(db, "manual_topup");
+        
+        let querySnapshot;
+        try {
+          const q = query(
+            manualTopUpRef,
+            orderBy("requestedAt", "desc")
+          );
+          querySnapshot = await getDocs(q);
+        } catch (error) {
+          console.warn("OrderBy failed, using simple query:", error);
+          querySnapshot = await getDocs(manualTopUpRef);
+        }
+        
+        const fetchedTransactions = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          const requestedAt = data.requestedAt?.toDate ? data.requestedAt.toDate() : (data.requestedAt ? new Date(data.requestedAt) : new Date());
+          
+          fetchedTransactions.push({
+            id: formatTransactionId(doc.id),
+            documentId: doc.id,
+            name: data.userName || "",
+            rfid: data.userId || "",
+            amount: data.amount || 0,
+            method: data.paymentMethod || "",
+            reference: data.referenceId || "",
+            datetime: requestedAt,
+            status: data.status || "approved",
+          });
+        });
+        
+        // Sort by date if not already sorted
+        fetchedTransactions.sort((a, b) => {
+          const dateA = a.datetime instanceof Date ? a.datetime : new Date(a.datetime);
+          const dateB = b.datetime instanceof Date ? b.datetime : new Date(b.datetime);
+          return dateB - dateA;
+        });
+        
+        setTransactions(fetchedTransactions);
+      } catch (error) {
+        console.error("Error fetching manual top-ups:", error);
+      } finally {
+        setTransactionsLoading(false);
+      }
+    };
 
-    const results = mockUser.filter(
-      (u) =>
-        u.name.toLowerCase().includes(query.toLowerCase()) ||
-        String(u.rfid).includes(query)
-    );
+    fetchManualTopUps();
+  }, []); // Fetch on mount and after successful top-up
 
-    setFilteredUsers(results);
+  // Search users in Firestore
+  useEffect(() => {
+    const searchUsers = async () => {
+      if (!query.trim()) {
+        setFilteredUsers([]);
+        return;
+      }
+
+      try {
+        setSearchLoading(true);
+        const usersRef = collection(db, "users");
+        const searchTerm = query.trim().toUpperCase(); // RFID is uppercase
+        const searchTermLower = query.trim().toLowerCase(); // For name search
+        const results = [];
+
+        // First, try to search by RFID (Document ID)
+        // Check if search term looks like an RFID (alphanumeric, typically uppercase)
+        const isLikelyRFID = /^[A-Z0-9]+$/i.test(query.trim());
+        
+        if (isLikelyRFID) {
+          try {
+            const userDocRef = doc(db, "users", searchTerm);
+            const userDocSnap = await getDoc(userDocRef);
+            
+            if (userDocSnap.exists()) {
+              const userData = userDocSnap.data();
+              results.push({
+                id: userDocSnap.id,
+                rfid: userDocSnap.id,
+                name: userData.fullName || `${userData.firstName || ""} ${userData.lastName || ""}`.trim() || "Unknown",
+                balance: userData.balance || 0,
+                email: userData.email || "",
+              });
+            }
+          } catch (error) {
+            console.log("RFID search failed:", error);
+          }
+        }
+
+        // Search by name - get all users and filter client-side for better flexibility
+        const allUsersSnapshot = await getDocs(usersRef);
+        allUsersSnapshot.forEach((doc) => {
+          // Skip if already added from RFID search
+          if (results.find(u => u.id === doc.id)) return;
+
+          const userData = doc.data();
+          const fullName = userData.fullName || `${userData.firstName || ""} ${userData.lastName || ""}`.trim() || "";
+          const firstName = (userData.firstName || "").toLowerCase();
+          const lastName = (userData.lastName || "").toLowerCase();
+          const rfidLower = doc.id.toLowerCase();
+          
+          // Check if matches name or RFID
+          if (
+            fullName.toLowerCase().includes(searchTermLower) ||
+            firstName.includes(searchTermLower) ||
+            lastName.includes(searchTermLower) ||
+            rfidLower.includes(searchTermLower) ||
+            doc.id.toUpperCase().includes(searchTerm)
+          ) {
+            results.push({
+              id: doc.id,
+              rfid: doc.id, // Document ID is the RFID
+              name: fullName || "Unknown",
+              balance: userData.balance || 0,
+              email: userData.email || "",
+            });
+          }
+        });
+
+        // Remove duplicates and limit results
+        const uniqueResults = results
+          .filter((user, index, self) => index === self.findIndex((u) => u.id === user.id))
+          .slice(0, 20); // Limit to 20 results for performance
+
+        setFilteredUsers(uniqueResults);
+      } catch (error) {
+        console.error("Error searching users:", error);
+        setFilteredUsers([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    };
+
+    // Debounce search
+    const timer = setTimeout(() => {
+      searchUsers();
+    }, 300);
+
+    return () => clearTimeout(timer);
   }, [query]);
 
   const handleSearchModal = () => {
@@ -77,9 +222,28 @@ export default function ManualTopUp() {
     setQuery("");
   };
 
-  const handleSelectUser = (user) => {
-    setSelectedUser(user);
-    setSearchModal(false);
+  const handleSelectUser = async (user) => {
+    try {
+      // Fetch latest user data to get current balance
+      const userDocRef = doc(db, "users", user.rfid);
+      const userDocSnap = await getDoc(userDocRef);
+      
+      if (userDocSnap.exists()) {
+        const userData = userDocSnap.data();
+        setSelectedUser({
+          ...user,
+          balance: userData.balance || 0,
+          name: userData.fullName || user.name,
+        });
+      } else {
+        setSelectedUser(user);
+      }
+      setSearchModal(false);
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+      setSelectedUser(user);
+      setSearchModal(false);
+    }
   };
 
   // Auto-generate reference number when Cash is selected
@@ -109,39 +273,106 @@ export default function ManualTopUp() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!validateForm()) return;
+    if (!validateForm() || !selectedUser || processing) return;
 
-    const now = new Date();
-    const newTransaction = {
-      id: generateTransactionId(),
-      name: selectedUser.name,
-      rfid: selectedUser.rfid,
-      amount: Number(amount),
-      method,
-      reference,
-      datetime: now,
-    };
+    try {
+      setProcessing(true);
 
-    // ADD TO TRANSACTION LOGS
-    setTransactions((prev) => [newTransaction, ...prev]);
+      // Create manual_topup document in Firestore
+      const manualTopUpRef = collection(db, "manual_topup");
+      const manualTopUpDoc = await addDoc(manualTopUpRef, {
+        amount: Number(amount),
+        paymentMethod: method,
+        processedAt: serverTimestamp(),
+        referenceId: reference,
+        requestedAt: serverTimestamp(),
+        status: "approved",
+        userEmail: selectedUser.email || "",
+        userId: selectedUser.rfid,
+        userName: selectedUser.name,
+      });
 
-    // Show success modal
-    setShowSuccess(true);
+      // Update user balance in Firestore
+      const userRef = doc(db, "users", selectedUser.rfid);
+      await updateDoc(userRef, {
+        balance: increment(Number(amount)),
+      });
 
-    // Reset form and return UI after success
-    setTimeout(() => {
-      setSelectedUser(null);
-      setAmount("");
-      setMethod("Cash");
-      setReference("");
-      setNote("");
-      setErrors({});
-      setShowGlobalError(false);
-      setShowSuccess(false);
-    }, 1500);
+      // Format transaction ID from document ID
+      const transactionId = formatTransactionId(manualTopUpDoc.id);
+      const now = new Date();
+
+      // Refresh user balance
+      const userDocSnap = await getDoc(userRef);
+      let updatedBalance = selectedUser.balance;
+      if (userDocSnap.exists()) {
+        const userData = userDocSnap.data();
+        updatedBalance = userData.balance || 0;
+        setSelectedUser({
+          ...selectedUser,
+          balance: updatedBalance,
+        });
+      }
+
+      // Refresh transactions from Firestore
+      const manualTopUpCollection = collection(db, "manual_topup");
+      let refreshQuerySnapshot;
+      try {
+        const refreshQ = query(manualTopUpCollection, orderBy("requestedAt", "desc"));
+        refreshQuerySnapshot = await getDocs(refreshQ);
+      } catch (error) {
+        console.warn("OrderBy failed, using simple query:", error);
+        refreshQuerySnapshot = await getDocs(manualTopUpCollection);
+      }
+      
+      const refreshedTransactions = [];
+      refreshQuerySnapshot.forEach((doc) => {
+        const data = doc.data();
+        const requestedAt = data.requestedAt?.toDate ? data.requestedAt.toDate() : (data.requestedAt ? new Date(data.requestedAt) : new Date());
+        refreshedTransactions.push({
+          id: formatTransactionId(doc.id),
+          documentId: doc.id,
+          name: data.userName || "",
+          rfid: data.userId || "",
+          amount: data.amount || 0,
+          method: data.paymentMethod || "",
+          reference: data.referenceId || "",
+          datetime: requestedAt,
+          status: data.status || "approved",
+        });
+      });
+      
+      // Sort by date if not already sorted
+      refreshedTransactions.sort((a, b) => {
+        const dateA = a.datetime instanceof Date ? a.datetime : new Date(a.datetime);
+        const dateB = b.datetime instanceof Date ? b.datetime : new Date(b.datetime);
+        return dateB - dateA;
+      });
+      
+      setTransactions(refreshedTransactions);
+
+      // Show success modal
+      setShowSuccess(true);
+
+      // Reset form after success (keep user selected so they can add more)
+      setTimeout(() => {
+        setAmount("");
+        setMethod("Cash");
+        setReference("");
+        setNote("");
+        setErrors({});
+        setShowGlobalError(false);
+        setShowSuccess(false);
+        setProcessing(false);
+      }, 2000);
+    } catch (error) {
+      console.error("Error processing top-up:", error);
+      alert("Failed to process top-up. Please try again.");
+      setProcessing(false);
+    }
   };
 
   // styling helpers
@@ -326,8 +557,12 @@ export default function ManualTopUp() {
                     Discard
                   </button>
 
-                  <button className="bg-green-500 w-full md:w-auto text-white rounded-lg px-4 py-2 hover:bg-green-500/90 active:bg-green-600 transition-colors duration-150 cursor-pointer">
-                    Confirm
+                  <button 
+                    type="submit"
+                    disabled={processing}
+                    className="bg-green-500 w-full md:w-auto text-white rounded-lg px-4 py-2 hover:bg-green-500/90 active:bg-green-600 transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {processing ? "Processing..." : "Confirm"}
                   </button>
                 </div>
               </form>
@@ -341,14 +576,25 @@ export default function ManualTopUp() {
         <div className="flex items-centerr">
           {/* label */}
           <span className="font-semibold text-gray-500 text-xs sm:text-sm">
-            Recent Top-up
+            All Manual Top-up
           </span>
           {/* see all link */}
         </div>
 
         {/* mobile */}
         <div className="flex xl:hidden flex-col gap-2">
-          {transactions.length === 0 ? (
+          {transactionsLoading ? (
+            <div className="flex flex-col gap-4 sm:gap-5 p-4 sm:p-5 rounded-2xl border border-dashed border-gray-300 bg-gray-50">
+              <div className="flex items-center justify-center pt-2">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600"></div>
+              </div>
+              <div className="flex flex-col text-center pb-2">
+                <span className="text-base sm:text-lg font-semibold">
+                  Loading...
+                </span>
+              </div>
+            </div>
+          ) : transactions.length === 0 ? (
             <div className="flex flex-col gap-4 sm:gap-5 p-4 sm:p-5 rounded-2xl border border-dashed border-gray-300 bg-gray-50">
               <div className="flex items-center justify-center pt-2">
                 <div className="flex items-center justify-center p-4 bg-gray-200 rounded-full">
@@ -390,7 +636,18 @@ export default function ManualTopUp() {
 
         {/* desktop */}
         <div className="hidden xl:flex rounded-2xl overflow-hidden  w-full">
-          {transactions.length === 0 ? (
+          {transactionsLoading ? (
+            <div className="flex flex-col gap-4 sm:gap-5 p-4 sm:p-5 rounded-2xl border border-dashed border-gray-300 bg-gray-50 w-full">
+              <div className="flex items-center justify-center pt-2">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600"></div>
+              </div>
+              <div className="flex flex-col text-center pb-2">
+                <span className="text-base sm:text-lg font-semibold">
+                  Loading...
+                </span>
+              </div>
+            </div>
+          ) : transactions.length === 0 ? (
             <div className="flex flex-col gap-4 sm:gap-5 p-4 sm:p-5 rounded-2xl border border-dashed border-gray-300 bg-gray-50 w-full">
               <div className="flex items-center justify-center pt-2">
                 <div className="flex items-center justify-center p-4 bg-gray-200 rounded-full">
@@ -428,7 +685,7 @@ export default function ManualTopUp() {
                         <span className="text-green-500">P{t.amount}.00</span>
                       </td>
                       <td className="px-6 py-4">
-                        {t.datetime.toLocaleString()}
+                        {t.datetime instanceof Date ? formatDateTime(t.datetime) : t.datetime?.toLocaleString() || ""}
                       </td>
                       <td className="px-6 py-4">
                         <button
@@ -492,7 +749,16 @@ export default function ManualTopUp() {
                   List of Users
                 </span>
 
-                {filteredUsers.length === 0 ? (
+                {searchLoading ? (
+                  <div className="flex flex-col gap-4 items-center justify-center p-4 border border-dashed border-gray-300 bg-gray-100 rounded-lg">
+                    <div className="flex items-center justify-center pt-2">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600"></div>
+                    </div>
+                    <div className="flex flex-col text-center pb-2">
+                      <span className="font-semibold">Searching...</span>
+                    </div>
+                  </div>
+                ) : filteredUsers.length === 0 ? (
                   <div className="flex flex-col gap-4 items-center justify-center p-4 border border-dashed border-gray-300 bg-gray-100 rounded-lg">
                     <div className="flex items-center justify-center pt-2">
                       <div className="flex items-center justify-center p-3 rounded-full bg-gray-300">
@@ -503,7 +769,7 @@ export default function ManualTopUp() {
                     <div className="flex flex-col text-center pb-2">
                       <span className="font-semibold">No User Found</span>
                       <span className="text-xs sm:text-sm text-gray-500">
-                        There are no user found.
+                        {query.trim() ? "No user found matching your search." : "Enter a name or RFID to search."}
                       </span>
                     </div>
                   </div>
@@ -553,7 +819,7 @@ export default function ManualTopUp() {
                   Transaction Details
                 </span>
                 <span className="text-gray-500 text-xs sm:text-sm">
-                  {selectedTransaction.datetime.toLocaleString()}
+                  {selectedTransaction.datetime instanceof Date ? formatDateTime(selectedTransaction.datetime) : selectedTransaction.datetime?.toLocaleString() || ""}
                 </span>
               </div>
             </div>
@@ -574,7 +840,7 @@ export default function ManualTopUp() {
                   Transaction ID
                 </span>
                 <span className="font-semibold text-xs sm:text-sm">
-                  {selectedTransaction.id}
+                  {selectedTransaction.documentId ? formatTransactionId(selectedTransaction.documentId) : selectedTransaction.id}
                 </span>
               </div>
             </div>
