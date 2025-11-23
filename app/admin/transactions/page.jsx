@@ -3,19 +3,15 @@
 import AdminDesktopNavbar from "../components/AdminDesktopNavbar";
 import AdminNavbar from "../components/AdminNavbar";
 import AllTransactions from "./components/AllTransactions";
-import CompletedTransactions from "./components/CompleteTransaction";
-import RejectedTransactions from "./components/RejectedTransactions";
-
 import { useState } from "react";
 
 export default function AdminTransactionLogs() {
-  // Instead of storing a component function, store a string
-  const [activeTab, setActiveTab] = useState("all");
+  const [activePackage, setActivePackage] = useState("all");
 
-  const getButtonClass = (tab) => {
+  const getButtonClass = (packageType) => {
     const baseClasses =
-      "rounded-lg w-full cursor-pointer px-4 py-3 transition-colors duration-150";
-    const isActive = activeTab === tab;
+      "rounded-lg cursor-pointer px-4 py-3 transition-colors duration-150";
+    const isActive = activePackage === packageType;
 
     return isActive
       ? `${baseClasses} border border-green-500 bg-green-500 text-white`
@@ -29,32 +25,54 @@ export default function AdminTransactionLogs() {
         <AdminDesktopNavbar />
 
         <div className="flex flex-col xl:flex-row px-3 py-4 sm:p-4 md:p-5 gap-4 xl:gap-5">
-          <div className="flex xl:flex-col xl:w-72 items-center gap-2">
-            <button
-              onClick={() => setActiveTab("all")}
-              className={getButtonClass("all")}
-            >
-              All <span className="hidden md:inline-flex">Transactions</span>
-            </button>
+          {/* Tabs Container - Horizontal scroll on mobile, vertical on desktop */}
+          <div className="flex xl:flex-col xl:w-72 gap-2 overflow-x-auto xl:overflow-x-visible scrollbar-hide xl:scrollbar-default scroll-smooth">
+            <div className="flex xl:flex-col items-center gap-2 min-w-max xl:min-w-0">
+              <button
+                onClick={() => setActivePackage("all")}
+                className={`${getButtonClass("all")} flex-shrink-0 xl:w-full`}
+              >
+                All Transactions
+              </button>
 
-            <button
-              onClick={() => setActiveTab("complete")}
-              className={getButtonClass("complete")}
-            >
-              Complete <span className="hidden md:inline-flex">Transactions</span>
-            </button>
-            <button
-              onClick={() => setActiveTab("reject")}
-              className={getButtonClass("reject")}
-            >
-              Reject <span className="hidden md:inline-flex">Transactions</span>
-            </button>
+              <button
+                onClick={() => setActivePackage("Package 1")}
+                className={`${getButtonClass("Package 1")} flex-shrink-0 xl:w-full`}
+              >
+                Package 1
+              </button>
+
+              <button
+                onClick={() => setActivePackage("Package 2")}
+                className={`${getButtonClass("Package 2")} flex-shrink-0 xl:w-full`}
+              >
+                Package 2
+              </button>
+
+              <button
+                onClick={() => setActivePackage("Package 3")}
+                className={`${getButtonClass("Package 3")} flex-shrink-0 xl:w-full`}
+              >
+                Package 3
+              </button>
+
+              <button
+                onClick={() => setActivePackage("Package 4")}
+                className={`${getButtonClass("Package 4")} flex-shrink-0 xl:w-full`}
+              >
+                Package 4
+              </button>
+
+              <button
+                onClick={() => setActivePackage("refund")}
+                className={`${getButtonClass("refund")} flex-shrink-0 xl:w-full`}
+              >
+                Refund
+              </button>
+            </div>
           </div>
 
-          {/* SAFE COMPONENT RENDERING */}
-          {activeTab === "all" && <AllTransactions />}
-          {activeTab === "complete" && <CompletedTransactions />}
-          {activeTab === "reject" && <RejectedTransactions />}
+          <AllTransactions packageFilter={activePackage} />
         </div>
       </div>
     </div>

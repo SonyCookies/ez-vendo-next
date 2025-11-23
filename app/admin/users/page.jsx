@@ -2,14 +2,14 @@
 
 import AdminDesktopNavbar from "../components/AdminDesktopNavbar";
 import AdminNavbar from "../components/AdminNavbar";
-import AllUsers from "./components/AllUsers";
-import BlockedUsers from "./components/BlockedUsers";
+import RegisteredUsers from "./components/RegisteredUsers";
+import UnregisteredUsers from "./components/UnregisteredUsers";
 
 import { useState } from "react";
 
-export default function AdminTopUp() {
+export default function AdminUsers() {
   // Instead of storing a component function, store a string
-  const [activeTab, setActiveTab] = useState("all");
+  const [activeTab, setActiveTab] = useState("registered");
 
   const getButtonClass = (tab) => {
     const baseClasses =
@@ -30,23 +30,23 @@ export default function AdminTopUp() {
         <div className="flex flex-col xl:flex-row px-3 py-4 sm:p-4 md:p-5 gap-4 xl:gap-5">
           <div className="flex xl:flex-col xl:w-72 items-center gap-2">
             <button
-              onClick={() => setActiveTab("all")}
-              className={getButtonClass("all")}
+              onClick={() => setActiveTab("registered")}
+              className={getButtonClass("registered")}
             >
-              All users
+              Registered Users
             </button>
 
             <button
-              onClick={() => setActiveTab("block")}
-              className={getButtonClass("block")}
+              onClick={() => setActiveTab("unregistered")}
+              className={getButtonClass("unregistered")}
             >
-              Blacklist Users
+              Unregistered Users
             </button>
           </div>
 
           {/* SAFE COMPONENT RENDERING */}
-          {activeTab === "all" && <AllUsers />}
-          {activeTab === "block" && <BlockedUsers />}
+          {activeTab === "registered" && <RegisteredUsers />}
+          {activeTab === "unregistered" && <UnregisteredUsers />}
         </div>
       </div>
     </div>

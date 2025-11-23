@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import {
   Archive,
@@ -12,6 +12,8 @@ import {
   Settings,
   UsersRound,
   X,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -21,6 +23,33 @@ export default function AdminNavbar() {
   const pathname = usePathname();
 
   const [toggleSidebar, setToggleSidebar] = useState(false);
+  
+  // Initialize collapsed state from localStorage with lazy initialization
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    // Only access localStorage on client-side
+    if (typeof window !== "undefined") {
+      const savedState = localStorage.getItem("adminSidebarCollapsed");
+      if (savedState !== null) {
+        try {
+          return JSON.parse(savedState);
+        } catch (e) {
+          return false;
+        }
+      }
+    }
+    return false;
+  });
+
+  // Save collapsed state to localStorage when it changes
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("adminSidebarCollapsed", JSON.stringify(isCollapsed));
+    }
+  }, [isCollapsed]);
+
+  const toggleCollapse = () => {
+    setIsCollapsed((prev) => !prev);
+  };
 
   const menuItems = [
     {
@@ -75,7 +104,11 @@ export default function AdminNavbar() {
   return (
     <>
       {/* navbar */}
-      <div className=" bg-gray-900 px-3 py-4 sm:p-4 md:p-5 flex lg:flex-col items-center justify-between lg:justify-start lg:gap-6  text-white lg:w-72 xl:w-96">
+      <div
+        className={`bg-gray-900 px-3 py-4 sm:p-4 md:p-5 flex lg:flex-col items-center justify-between lg:justify-start lg:gap-6 text-white transition-all duration-300 relative ${
+          isCollapsed ? "lg:w-20 xl:w-20" : "lg:w-72 xl:w-96"
+        }`}
+      >
         {/* left (logo) */}
         <div className="flex items-center  gap-2 lg:w-full">
           {/* open sidebar */}
@@ -125,7 +158,9 @@ export default function AdminNavbar() {
             </span>
           </div>
           {/* desktop */}
-          <div className="hidden xl:flex items-center gap-2">
+          <div className={`hidden xl:flex items-center gap-2 transition-all duration-300 ${
+            isCollapsed ? "justify-center w-full" : ""
+          }`}>
             <Image
               src="/favicon.ico"
               alt="EZ-Vendo Logo"
@@ -133,19 +168,38 @@ export default function AdminNavbar() {
               height={50}
               className=""
             />
-            <span className="font-bold text-2xl">
-              <span className="text-green-500">EZ</span>-Vendo
-            </span>
+            {!isCollapsed && (
+              <span className="font-bold text-2xl whitespace-nowrap">
+                <span className="text-green-500">EZ</span>-Vendo
+              </span>
+            )}
           </div>
 
         </div>
 
+        {/* Collapse Toggle Button - Desktop Only */}
+        <button
+          onClick={toggleCollapse}
+          className="hidden lg:flex absolute top-1/2 -translate-y-1/2 -right-3 z-50 bg-gray-800 hover:bg-gray-700 text-white p-2.5 rounded-full border-2 border-gray-900 transition-colors duration-150 cursor-pointer shadow-lg"
+          aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {isCollapsed ? (
+            <ChevronRight className="size-5 sm:size-6" />
+          ) : (
+            <ChevronLeft className="size-5 sm:size-6" />
+          )}
+        </button>
+
         {/* right (nav items) */}
-        <div className="hidden lg:flex flex-col w-full gap-5 ">
+        <div className={`hidden lg:flex flex-col w-full gap-5 transition-all duration-300 ${
+          isCollapsed ? "items-center" : ""
+        }`}>
           {/* menus */}
           <div className="flex flex-col w-full gap-2">
             {/* suptitle */}
-            <span className="font-medium text-gray-500">Menus</span>
+            {!isCollapsed && (
+              <span className="font-medium text-gray-500 px-4">Menus</span>
+            )}
             {/* items */}
             <div className="flex flex-col w-full">
               {menuItems.map(({ id, name, icon: Icon, href }) => {
@@ -162,10 +216,15 @@ export default function AdminNavbar() {
                   <Link
                     key={id}
                     href={href}
-                    className={`flex items-center gap-2 px-4 py-3 rounded-lg transition-colors duration-150 cursor-pointer text-base sm:text-lg ${linkClasses}`}
+                    className={`flex items-center gap-2 px-4 py-3 rounded-lg transition-colors duration-150 cursor-pointer text-base sm:text-lg ${linkClasses} ${
+                      isCollapsed ? "justify-center" : ""
+                    }`}
+                    title={isCollapsed ? name : undefined}
                   >
-                    <Icon className="size-5 sm:size-6" />
-                    {name}
+                    <Icon className="size-5 sm:size-6 flex-shrink-0" />
+                    {!isCollapsed && (
+                      <span className="whitespace-nowrap">{name}</span>
+                    )}
                   </Link>
                 );
               })}
@@ -174,7 +233,9 @@ export default function AdminNavbar() {
           {/* settings */}
           <div className="flex flex-col w-full gap-2">
             {/* suptitle */}
-            <span className="font-medium text-gray-500">Settings</span>
+            {!isCollapsed && (
+              <span className="font-medium text-gray-500 px-4">Settings</span>
+            )}
             {/* items */}
             <div className="flex flex-col w-full">
               {settingsItems.map(({ id, name, icon: Icon, href }) => {
@@ -191,19 +252,29 @@ export default function AdminNavbar() {
                   <Link
                     key={id}
                     href={href}
-                    className={`flex items-center gap-2 px-4 py-3 rounded-lg transition-colors duration-150 cursor-pointer text-base sm:text-lg ${linkClasses}`}
+                    className={`flex items-center gap-2 px-4 py-3 rounded-lg transition-colors duration-150 cursor-pointer text-base sm:text-lg ${linkClasses} ${
+                      isCollapsed ? "justify-center" : ""
+                    }`}
+                    title={isCollapsed ? name : undefined}
                   >
-                    <Icon className="size-5 sm:size-6" />
-                    {name}
+                    <Icon className="size-5 sm:size-6 flex-shrink-0" />
+                    {!isCollapsed && (
+                      <span className="whitespace-nowrap">{name}</span>
+                    )}
                   </Link>
                 );
               })}
               <Link
                 href="/admin/login"
-                className="flex items-center gap-2 px-4 py-3 rounded-lg text-red-500 hover:bg-gray-800 active:bg-gray-800/90 transition-colors duration-150 cursor-pointer text-base sm:text-lg"
+                className={`flex items-center gap-2 px-4 py-3 rounded-lg text-red-500 hover:bg-gray-800 active:bg-gray-800/90 transition-colors duration-150 cursor-pointer text-base sm:text-lg ${
+                  isCollapsed ? "justify-center" : ""
+                }`}
+                title={isCollapsed ? "Sign out" : undefined}
               >
-                <LogOut className="size-5 sm:size-6" />
-                Sign out
+                <LogOut className="size-5 sm:size-6 flex-shrink-0" />
+                {!isCollapsed && (
+                  <span className="whitespace-nowrap">Sign out</span>
+                )}
               </Link>
             </div>
           </div>

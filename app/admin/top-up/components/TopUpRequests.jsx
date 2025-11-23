@@ -8,12 +8,17 @@ import {
   Trash2,
   X,
   ChevronDown,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import { db } from "../../../../firebase";
 import { collection, getDocs, query, where, orderBy, doc, updateDoc, getDoc, increment } from "firebase/firestore";
 
 export default function TopUpRequests() {
+  // Tab state
+  const [activeTab, setActiveTab] = useState("pending"); // "pending" or "history"
+  
   // 1. State to manage the currently viewed request data (and modal visibility)
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -21,31 +26,46 @@ export default function TopUpRequests() {
   const [previewImageUrl, setPreviewImageUrl] = useState("");
   const [imageLoading, setImageLoading] = useState(true);
   const [previewImageLoading, setPreviewImageLoading] = useState(true);
+  const [isClosing, setIsClosing] = useState(false);
+  const [isOpening, setIsOpening] = useState(false);
+  
+  // Success/Error Modal States
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [modalMessage, setModalMessage] = useState("");
   
   // Data state
   const [topUpRequests, setTopUpRequests] = useState([]);
+  const [topUpHistory, setTopUpHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
   
-  // Top-up logs state (approved/rejected)
-  const [topUpLogs, setTopUpLogs] = useState([]);
-  const [logsLoading, setLogsLoading] = useState(true);
 
   // Pagination (active only when not searching)
   const [currentPage, setCurrentPage] = useState(1);
+  const [historyPage, setHistoryPage] = useState(1);
   const itemsPerPage = 10;
 
   // Search states
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [historySearchQuery, setHistorySearchQuery] = useState("");
+  const [debouncedHistoryQuery, setDebouncedHistoryQuery] = useState("");
   
   // Sort state
   const [sortBy, setSortBy] = useState("date"); // "date", "name", "rfid"
   const [sortOrder, setSortOrder] = useState("desc"); // "asc", "desc"
+  const [historySortBy, setHistorySortBy] = useState("date");
+  const [historySortOrder, setHistorySortOrder] = useState("desc");
+  
+  // Status filter for history
+  const [historyStatusFilter, setHistoryStatusFilter] = useState("all"); // "all", "approved", "rejected"
 
-  // Fetch topup requests from Firestore
+  // Fetch topup requests from Firestore (pending)
   useEffect(() => {
     const fetchTopUpRequests = async () => {
+      const startTime = Date.now();
       try {
         setLoading(true);
         const topUpRequestsRef = collection(db, "topup_requests");
@@ -94,21 +114,44 @@ export default function TopUpRequests() {
         });
         
         setTopUpRequests(requests);
+
+        // Ensure minimum 0.65 second loading time for smooth transition
+        const elapsedTime = Date.now() - startTime;
+        const minLoadingTime = 650;
+        const remainingTime = Math.max(0, minLoadingTime - elapsedTime);
+        
+        if (remainingTime > 0) {
+          await new Promise(resolve => setTimeout(resolve, remainingTime));
+        }
       } catch (error) {
         console.error("Error fetching topup requests:", error);
+        
+        // Ensure minimum loading time even on error
+        const elapsedTime = Date.now() - startTime;
+        const minLoadingTime = 650;
+        const remainingTime = Math.max(0, minLoadingTime - elapsedTime);
+        
+        if (remainingTime > 0) {
+          await new Promise(resolve => setTimeout(resolve, remainingTime));
+        }
       } finally {
         setLoading(false);
       }
     };
 
-    fetchTopUpRequests();
-  }, []);
+    if (activeTab === "pending") {
+      fetchTopUpRequests();
+    }
+  }, [activeTab]);
 
-  // Fetch top-up logs (approved/rejected) from Firestore
+  // Fetch top-up history (approved and rejected)
   useEffect(() => {
-    const fetchTopUpLogs = async () => {
+    const fetchTopUpHistory = async () => {
+      if (activeTab !== "history") return;
+      
+      const startTime = Date.now();
       try {
-        setLogsLoading(true);
+        setHistoryLoading(true);
         const topUpRequestsRef = collection(db, "topup_requests");
         
         let querySnapshot;
@@ -120,7 +163,7 @@ export default function TopUpRequests() {
           );
           querySnapshot = await getDocs(q);
         } catch (error) {
-          console.warn("OrderBy failed, using simple query:", error);
+          console.warn("OrderBy failed for history, using simple query:", error);
           const q = query(
             topUpRequestsRef,
             where("status", "in", ["approved", "rejected"])
@@ -128,13 +171,11 @@ export default function TopUpRequests() {
           querySnapshot = await getDocs(q);
         }
         
-        const logs = [];
+        const history = [];
         querySnapshot.forEach((doc) => {
           const data = doc.data();
-          const requestedAt = data.requestedAt?.toDate ? data.requestedAt.toDate() : (data.requestedAt ? new Date(data.requestedAt) : new Date());
-          const processedAt = data.processedAt?.toDate ? data.processedAt.toDate() : (data.processedAt ? new Date(data.processedAt) : requestedAt);
-          
-          logs.push({
+          const processedAt = data.processedAt?.toDate ? data.processedAt.toDate() : (data.processedAt ? new Date(data.processedAt) : new Date());
+          history.push({
             id: doc.id,
             documentId: doc.id,
             userName: data.userName || "",
@@ -144,31 +185,50 @@ export default function TopUpRequests() {
             paymentMethod: data.paymentMethod || "",
             referenceId: data.referenceId || "",
             receiptURL: data.receiptURL || "",
-            requestedAt: requestedAt,
+            requestedAt: data.requestedAt?.toDate ? data.requestedAt.toDate() : (data.requestedAt ? new Date(data.requestedAt) : new Date()),
             processedAt: processedAt,
           });
         });
         
         // Sort by processedAt in descending order
-        logs.sort((a, b) => {
+        history.sort((a, b) => {
           const dateA = a.processedAt instanceof Date ? a.processedAt : new Date(a.processedAt);
           const dateB = b.processedAt instanceof Date ? b.processedAt : new Date(b.processedAt);
           return dateB - dateA;
         });
         
-        setTopUpLogs(logs);
+        setTopUpHistory(history);
+
+        // Ensure minimum 0.65 second loading time
+        const elapsedTime = Date.now() - startTime;
+        const minLoadingTime = 650;
+        const remainingTime = Math.max(0, minLoadingTime - elapsedTime);
+        
+        if (remainingTime > 0) {
+          await new Promise(resolve => setTimeout(resolve, remainingTime));
+        }
       } catch (error) {
-        console.error("Error fetching top-up logs:", error);
+        console.error("Error fetching top-up history:", error);
+        
+        const elapsedTime = Date.now() - startTime;
+        const minLoadingTime = 650;
+        const remainingTime = Math.max(0, minLoadingTime - elapsedTime);
+        
+        if (remainingTime > 0) {
+          await new Promise(resolve => setTimeout(resolve, remainingTime));
+        }
       } finally {
-        setLogsLoading(false);
+        setHistoryLoading(false);
       }
     };
 
-    fetchTopUpLogs();
-  }, []);
+    fetchTopUpHistory();
+  }, [activeTab]);
+
 
   // Refresh data after approve/reject
   const refreshData = async () => {
+    const startTime = Date.now();
     try {
       setLoading(true);
       const topUpRequestsRef = collection(db, "topup_requests");
@@ -214,18 +274,100 @@ export default function TopUpRequests() {
       });
       
       setTopUpRequests(requests);
+
+      // Also refresh history if history tab is active
+      if (activeTab === "history") {
+        setHistoryLoading(true);
+        try {
+          let historyQuerySnapshot;
+          try {
+            const historyQ = query(
+              topUpRequestsRef,
+              where("status", "in", ["approved", "rejected"]),
+              orderBy("processedAt", "desc")
+            );
+            historyQuerySnapshot = await getDocs(historyQ);
+          } catch (error) {
+            console.warn("OrderBy failed for history refresh, using simple query:", error);
+            const historyQ = query(
+              topUpRequestsRef,
+              where("status", "in", ["approved", "rejected"])
+            );
+            historyQuerySnapshot = await getDocs(historyQ);
+          }
+          
+          const history = [];
+          historyQuerySnapshot.forEach((doc) => {
+            const data = doc.data();
+            const processedAt = data.processedAt?.toDate ? data.processedAt.toDate() : (data.processedAt ? new Date(data.processedAt) : new Date());
+            history.push({
+              id: doc.id,
+              documentId: doc.id,
+              userName: data.userName || "",
+              userId: data.userId || "",
+              amount: data.amount || 0,
+              status: data.status || "",
+              paymentMethod: data.paymentMethod || "",
+              referenceId: data.referenceId || "",
+              receiptURL: data.receiptURL || "",
+              requestedAt: data.requestedAt?.toDate ? data.requestedAt.toDate() : (data.requestedAt ? new Date(data.requestedAt) : new Date()),
+              processedAt: processedAt,
+            });
+          });
+          
+          history.sort((a, b) => {
+            const dateA = a.processedAt instanceof Date ? a.processedAt : new Date(a.processedAt);
+            const dateB = b.processedAt instanceof Date ? b.processedAt : new Date(b.processedAt);
+            return dateB - dateA;
+          });
+          
+          setTopUpHistory(history);
+        } catch (error) {
+          console.error("Error refreshing history:", error);
+        } finally {
+          setHistoryLoading(false);
+        }
+      }
+
+      // Ensure minimum 0.65 second loading time
+      const elapsedTime = Date.now() - startTime;
+      const minLoadingTime = 650;
+      const remainingTime = Math.max(0, minLoadingTime - elapsedTime);
+      
+      if (remainingTime > 0) {
+        await new Promise(resolve => setTimeout(resolve, remainingTime));
+      }
     } catch (error) {
       console.error("Error refreshing topup requests:", error);
+      
+      // Ensure minimum loading time even on error
+      const elapsedTime = Date.now() - startTime;
+      const minLoadingTime = 650;
+      const remainingTime = Math.max(0, minLoadingTime - elapsedTime);
+      
+      if (remainingTime > 0) {
+        await new Promise(resolve => setTimeout(resolve, remainingTime));
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // Format transaction ID (EZ-****** where ****** is first 6 chars of document ID)
-  const formatTransactionId = (documentId) => {
-    if (!documentId) return "EZ-000000";
-    const firstSix = documentId.substring(0, 6).toUpperCase();
-    return `EZ-${firstSix}`;
+  // Format transaction ID (PAYMENTMETHOD-FULLDOCUMENTID)
+  const formatTransactionId = (paymentMethod, documentId) => {
+    if (!documentId) return "N/A-000000";
+    
+    // Clean payment method - remove any dashes and trim
+    let method = paymentMethod ? paymentMethod.toUpperCase().trim().replace(/-/g, '') : "N/A";
+    
+    // Check if documentId already has the format PAYMENTMETHOD-XXXXX
+    // If it does, return it as-is to avoid duplication
+    if (method !== "N/A" && documentId.toUpperCase().startsWith(method + "-")) {
+      return documentId;
+    }
+    
+    // Otherwise, format as PAYMENTMETHOD-DOCUMENTID
+    return `${method}-${documentId}`;
   };
 
   // Format date and time
@@ -286,6 +428,27 @@ export default function TopUpRequests() {
     });
   }, [topUpRequests]);
 
+  // Transform history data for display
+  const historyItems = useMemo(() => {
+    return topUpHistory.map((item) => {
+      const { date, time } = formatDateTime(item.processedAt);
+      return {
+        id: item.id,
+        documentId: item.documentId,
+        name: item.userName,
+        rfid: item.userId,
+        amount: item.amount,
+        status: item.status.charAt(0).toUpperCase() + item.status.slice(1),
+        paymentMethod: item.paymentMethod,
+        referenceNumber: item.referenceId,
+        receiptURL: item.receiptURL,
+        date,
+        time,
+        processedAt: item.processedAt,
+      };
+    });
+  }, [topUpHistory]);
+
   useEffect(() => {
     // if short query (<3 chars) we keep instant behavior and skip debounce
     if (searchQuery.trim().length < 3) {
@@ -300,10 +463,29 @@ export default function TopUpRequests() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // History search debounce
+  useEffect(() => {
+    if (historySearchQuery.trim().length < 3) {
+      setDebouncedHistoryQuery(historySearchQuery);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setDebouncedHistoryQuery(historySearchQuery);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [historySearchQuery]);
+
   const effectiveQuery =
     searchQuery.trim().length < 3
       ? searchQuery.trim().toLowerCase()
       : debouncedQuery.trim().toLowerCase();
+
+  const effectiveHistoryQuery =
+    historySearchQuery.trim().length < 3
+      ? historySearchQuery.trim().toLowerCase()
+      : debouncedHistoryQuery.trim().toLowerCase();
 
   const filteredAndSortedItems = useMemo(() => {
     let items = pendingRequestsItems;
@@ -315,7 +497,7 @@ export default function TopUpRequests() {
         return (
           item.name.toLowerCase().includes(q) ||
           item.paymentMethod.toLowerCase().includes(q) ||
-          formatTransactionId(item.documentId).toLowerCase().includes(q) ||
+          formatTransactionId(item.paymentMethod, item.documentId).toLowerCase().includes(q) ||
           item.referenceNumber.toLowerCase().includes(q) ||
           item.rfid.toString().toLowerCase().includes(q) ||
           `${item.date} ${item.time}`.toLowerCase().includes(q)
@@ -349,32 +531,144 @@ export default function TopUpRequests() {
     return sortedItems;
   }, [pendingRequestsItems, effectiveQuery, sortBy, sortOrder]);
 
-  // Pagination
+  // History filtering and sorting
+  const filteredAndSortedHistoryItems = useMemo(() => {
+    let items = historyItems;
+    
+    // Apply status filter
+    if (historyStatusFilter !== "all") {
+      items = items.filter((item) => {
+        return item.status.toLowerCase() === historyStatusFilter.toLowerCase();
+      });
+    }
+    
+    // Apply search filter
+    if (effectiveHistoryQuery) {
+      items = items.filter((item) => {
+        const q = effectiveHistoryQuery;
+        return (
+          item.name.toLowerCase().includes(q) ||
+          item.paymentMethod.toLowerCase().includes(q) ||
+          formatTransactionId(item.paymentMethod, item.documentId).toLowerCase().includes(q) ||
+          item.referenceNumber.toLowerCase().includes(q) ||
+          item.rfid.toString().toLowerCase().includes(q) ||
+          item.status.toLowerCase().includes(q) ||
+          `${item.date} ${item.time}`.toLowerCase().includes(q)
+        );
+      });
+    }
+    
+    // Apply sorting
+    const sortedItems = [...items].sort((a, b) => {
+      let comparison = 0;
+      
+      if (historySortBy === "date") {
+        const dateA = a.processedAt instanceof Date ? a.processedAt : new Date(a.processedAt);
+        const dateB = b.processedAt instanceof Date ? b.processedAt : new Date(b.processedAt);
+        comparison = dateB.getTime() - dateA.getTime();
+        return historySortOrder === "asc" ? -comparison : comparison;
+      } else if (historySortBy === "name") {
+        comparison = a.name.localeCompare(b.name);
+        return historySortOrder === "desc" ? -comparison : comparison;
+      } else if (historySortBy === "rfid") {
+        comparison = a.rfid.toString().localeCompare(b.rfid.toString());
+        return historySortOrder === "desc" ? -comparison : comparison;
+      }
+      
+      return comparison;
+    });
+    
+    return sortedItems;
+  }, [historyItems, historyStatusFilter, effectiveHistoryQuery, historySortBy, historySortOrder]);
 
+  // Pagination
   const totalPages = Math.max(
     1,
     Math.ceil(filteredAndSortedItems.length / itemsPerPage)
   );
+
+  const historyTotalPages = Math.max(
+    1,
+    Math.ceil(filteredAndSortedHistoryItems.length / itemsPerPage)
+  );
+  
   // Ensure currentPage in range when search cleared/filtered length changes
   useEffect(() => {
-    if (searchQuery.trim().length > 0 || debouncedQuery.trim().length > 0) {
-      // when searching we show ALL filtered results (no pagination)
+    if (effectiveQuery.length > 0) {
       setCurrentPage(1);
     } else {
-      // clamp current page to totalPages when not searching
       if (currentPage > totalPages) setCurrentPage(1);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, debouncedQuery, totalPages]);
+  }, [effectiveQuery, totalPages, currentPage]);
+
+  useEffect(() => {
+    if (effectiveHistoryQuery.length > 0) {
+      setHistoryPage(1);
+    } else {
+      if (historyPage > historyTotalPages) setHistoryPage(1);
+    }
+  }, [effectiveHistoryQuery, historyTotalPages, historyPage]);
+
+  // Reset page when status filter changes
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [historyStatusFilter]);
 
   const isSearching = effectiveQuery.length > 0;
+  const isHistorySearching = effectiveHistoryQuery.length > 0;
 
   const paginatedItems = filteredAndSortedItems.slice(
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
 
+  const paginatedHistoryItems = filteredAndSortedHistoryItems.slice(
+    (historyPage - 1) * itemsPerPage,
+    historyPage * itemsPerPage
+  );
+
   const itemsToDisplay = isSearching ? filteredAndSortedItems : paginatedItems;
+  const historyItemsToDisplay = isHistorySearching ? filteredAndSortedHistoryItems : paginatedHistoryItems;
+
+  // Handle page number click
+  const handlePageClick = (pageNum) => {
+    if (pageNum >= 1 && pageNum <= totalPages && pageNum <= 5) {
+      setCurrentPage(pageNum);
+    }
+  };
+
+  // Handle history page number click
+  const handleHistoryPageClick = (pageNum) => {
+    if (pageNum >= 1 && pageNum <= historyTotalPages && pageNum <= 5) {
+      setHistoryPage(pageNum);
+    }
+  };
+
+  // Generate visible page numbers (limited to 5)
+  const getVisiblePages = () => {
+    const pages = [];
+    const maxVisible = 5;
+    const maxPageToShow = Math.min(totalPages, maxVisible);
+    
+    for (let i = 1; i <= maxPageToShow; i++) {
+      pages.push(i);
+    }
+    
+    return pages;
+  };
+
+  // Generate visible history page numbers (limited to 5)
+  const getVisibleHistoryPages = () => {
+    const pages = [];
+    const maxVisible = 5;
+    const maxPageToShow = Math.min(historyTotalPages, maxVisible);
+    
+    for (let i = 1; i <= maxPageToShow; i++) {
+      pages.push(i);
+    }
+    
+    return pages;
+  };
 
   const anyModalOpen = selectedRequest !== null || showRejectModal || showImagePreview;
   useEffect(() => {
@@ -383,8 +677,16 @@ export default function TopUpRequests() {
   }, [anyModalOpen]);
 
   const handleViewRequest = (requestItem) => {
+    setIsClosing(false);
+    setIsOpening(false);
     setSelectedRequest(requestItem);
     setShowRejectModal(false);
+    // Trigger opening animation on next frame
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setIsOpening(true);
+      });
+    });
   };
 
   const handleReject = (item) => {
@@ -405,14 +707,19 @@ export default function TopUpRequests() {
         processedAt: new Date(),
       });
 
-      // Close modals and refresh data
-      closeAllModals();
+      // Close reject modal
+      setShowRejectModal(false);
+      
+      // Show success modal and refresh data
+      setModalMessage("Top-up request has been successfully rejected.");
+      setShowSuccessModal(true);
       await refreshData();
     } catch (error) {
       console.error("Error rejecting request:", error);
-      alert("Failed to reject request. Please try again.");
-    } finally {
       setProcessing(false);
+      setShowRejectModal(false);
+      setModalMessage("Failed to reject request. Please try again.");
+      setShowErrorModal(true);
     }
   };
 
@@ -428,8 +735,9 @@ export default function TopUpRequests() {
       const userSnapshot = await getDocs(userQuery);
 
       if (userSnapshot.empty) {
-        alert("User not found. Cannot approve request.");
         setProcessing(false);
+        setModalMessage("User not found. Cannot approve request.");
+        setShowErrorModal(true);
         return;
       }
 
@@ -448,22 +756,29 @@ export default function TopUpRequests() {
         processedAt: new Date(),
       });
 
-      // Close modals and refresh data
-      closeAllModals();
+      // Show success modal and refresh data
+      setModalMessage("Top-up request has been successfully approved.");
+      setShowSuccessModal(true);
       await refreshData();
     } catch (error) {
       console.error("Error approving request:", error);
-      alert("Failed to approve request. Please try again.");
-    } finally {
       setProcessing(false);
+      setModalMessage("Failed to approve request. Please try again.");
+      setShowErrorModal(true);
     }
   };
 
   const closeAllModals = () => {
-    setSelectedRequest(null);
-    setShowRejectModal(false);
-    setShowImagePreview(false);
-    setPreviewImageUrl("");
+    if (isClosing) return;
+    setIsOpening(false);
+    setIsClosing(true);
+    setTimeout(() => {
+      setSelectedRequest(null);
+      setShowRejectModal(false);
+      setShowImagePreview(false);
+      setPreviewImageUrl("");
+      setIsClosing(false);
+    }, 300);
   };
 
   const handleImageClick = (imageUrl) => {
@@ -493,94 +808,147 @@ export default function TopUpRequests() {
     }
   }, [selectedRequest]);
 
-  // JSX Helper (retained)
-  const fieldClass ="px-3 sm:px-4 py-3 w-full border border-gray-300 outline-none rounded-lg focus:border-green-500 placeholder:text-gray-500 transition-colors duration-150 pe-20 sm:pe-21";
 
-  // Skeleton Loading Components
-  const SkeletonRow = () => (
-    <div className="p-5 rounded-2xl border border-gray-300 flex items-center gap-4 animate-pulse">
-      <div className="flex-1 space-y-2">
-        <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-        <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-        <div className="h-6 bg-gray-200 rounded w-20"></div>
-      </div>
-      <div className="h-6 bg-gray-200 rounded w-16"></div>
-    </div>
-  );
-
-  const TableSkeleton = () => (
-    <div className="w-full">
-      <div className="border-b border-gray-300 bg-gray-100 h-12"></div>
-      {[...Array(5)].map((_, i) => (
-        <div key={i} className="border-b border-gray-300 py-4 px-6 animate-pulse">
-          <div className="flex gap-4">
-            <div className="h-4 bg-gray-200 rounded flex-1"></div>
-            <div className="h-4 bg-gray-200 rounded w-24"></div>
-            <div className="h-6 bg-gray-200 rounded w-20"></div>
-            <div className="h-4 bg-gray-200 rounded w-20"></div>
-            <div className="h-8 bg-gray-200 rounded w-20"></div>
+  // Skeleton Loading Component
+  const SkeletonLoader = () => (
+    <div className="flex flex-col xl:flex-1 gap-4">
+      {/* Total Card Skeleton with integrated button */}
+      <div className={`flex relative rounded-2xl overflow-hidden text-white animate-pulse ${
+        activeTab === "pending"
+          ? "bg-gradient-to-r from-yellow-500 via-yellow-400 to-yellow-500"
+          : "bg-gradient-to-r from-blue-500 via-blue-400 to-blue-500"
+      }`}>
+        <div className="flex flex-1 flex-col gap-2 p-5">
+          <div className={`h-9 sm:h-10 w-20 rounded ${
+            activeTab === "pending" ? "bg-yellow-600/50" : "bg-blue-600/50"
+          }`}></div>
+          <div className="flex flex-col gap-0.5">
+            <div className={`h-4 sm:h-5 w-56 rounded ${
+              activeTab === "pending" ? "bg-yellow-600/50" : "bg-blue-600/50"
+            }`}></div>
+            <div className={`h-3 w-36 rounded ${
+              activeTab === "pending" ? "bg-yellow-600/50" : "bg-blue-600/50"
+            }`}></div>
           </div>
         </div>
-      ))}
-    </div>
-  );
-
-  const ModalSkeleton = () => (
-    <div className="rounded-2xl relative bg-white p-4 sm:p-5 w-full max-w-lg flex flex-col gap-6 mt-2 mb-2 animate-pulse">
-      {/* Header Skeleton */}
-      <div className="flex flex-col gap-4 items-center justify-center py-2">
-        <div className="rounded-full p-3 bg-gray-200 w-16 h-16"></div>
-        <div className="flex flex-col gap-2 items-center">
-          <div className="h-5 bg-gray-200 rounded w-32"></div>
-          <div className="h-4 bg-gray-200 rounded w-40"></div>
+        {/* Tab Switcher Button Skeleton */}
+        {/* Icon Skeleton - Positioned at right edge, vertically centered */}
+        <div className={`absolute top-1/2 -translate-y-1/2 right-[60px] sm:right-[80px] rounded-full p-3 ${
+          activeTab === "pending" ? "bg-yellow-600/40" : "bg-blue-600/40"
+        }`}>
+          <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full ${
+            activeTab === "pending" ? "bg-yellow-700/50" : "bg-blue-700/50"
+          }`}></div>
+        </div>
+        
+        {/* Tab Switcher Button Skeleton - Full Height */}
+        <div className="flex pr-0">
+          <div className={`rounded-tr-2xl rounded-br-2xl px-4 sm:px-6 py-5 flex items-center justify-center ${
+            activeTab === "pending" ? "bg-yellow-600/40" : "bg-blue-600/40"
+          }`}>
+            <div className={`w-5 h-5 sm:w-6 sm:h-6 rounded ${
+              activeTab === "pending" ? "bg-yellow-700/50" : "bg-blue-700/50"
+            }`}></div>
+          </div>
         </div>
       </div>
 
-      {/* Name and Amount Skeleton */}
-      <div className="flex py-2 items-center">
-        <div className="flex flex-1 flex-col gap-2">
-          <div className="h-5 bg-gray-200 rounded w-40"></div>
-          <div className="h-4 bg-gray-200 rounded w-32"></div>
-        </div>
-        <div className="h-8 bg-gray-200 rounded w-24"></div>
-      </div>
+      {/* Main Content Skeleton */}
+      <div className="flex flex-col gap-4">
+        {/* Search Bar and Sort Filters Skeleton */}
+        <div className="flex flex-col gap-4">
+          {/* Search Bar Skeleton */}
+          <div className="flex flex-col gap-1 w-full">
+            <div className="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
+            <div className="h-12 w-full bg-gray-200 rounded-lg animate-pulse"></div>
+          </div>
 
-      {/* Transaction Details Skeleton */}
-      <div className="flex flex-col gap-3">
-        <div className="h-4 bg-gray-200 rounded w-32"></div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-1 flex flex-col p-3 rounded-lg border border-gray-300 gap-2">
-            <div className="h-3 bg-gray-200 rounded w-24"></div>
-            <div className="h-4 bg-gray-200 rounded w-20"></div>
-          </div>
-          <div className="col-span-1 flex flex-col p-3 rounded-lg border border-gray-300 gap-2">
-            <div className="h-3 bg-gray-200 rounded w-28"></div>
-            <div className="h-4 bg-gray-200 rounded w-24"></div>
-          </div>
-          <div className="col-span-2 flex flex-col p-3 rounded-lg border border-gray-300 gap-2">
-            <div className="h-3 bg-gray-200 rounded w-32"></div>
-            <div className="h-4 bg-gray-200 rounded w-36"></div>
-          </div>
-          {/* Image Skeleton */}
-          <div className="col-span-2 flex flex-col rounded-lg mb-2 gap-2">
-            <div className="h-3 bg-gray-200 rounded w-28"></div>
-            <div className="border border-gray-300 bg-gray-100 rounded-lg h-64 sm:h-72 flex items-center justify-center">
-              <div className="w-full h-full bg-gray-200 rounded-lg"></div>
+          {/* Sort Filters Skeleton */}
+          <div className="flex flex-col gap-2">
+            <div className="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="h-9 w-16 bg-gray-200 rounded-lg animate-pulse"></div>
+              <div className="h-9 w-16 bg-gray-200 rounded-lg animate-pulse"></div>
+              <div className="h-9 w-20 bg-gray-200 rounded-lg animate-pulse"></div>
             </div>
           </div>
         </div>
-        {/* Buttons Skeleton */}
-        <div className="flex gap-2 items-center w-full">
-          <div className="h-10 bg-gray-200 rounded flex-1"></div>
-          <div className="h-10 bg-gray-200 rounded flex-1"></div>
+
+        <div className="flex flex-col gap-2">
+          {/* Section Title and Status Filter Buttons Skeleton (for history tab) */}
+          {activeTab === "history" && (
+            <div className="flex flex-col gap-2">
+              <div className="h-4 w-40 bg-gray-200 rounded animate-pulse"></div>
+              
+              {/* Status Filter Buttons Skeleton */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {[...Array(3)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-9 w-20 bg-gray-200 rounded-lg animate-pulse"
+                  ></div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Section Title Skeleton (for pending tab) */}
+          {activeTab === "pending" && (
+            <div className="h-4 w-40 bg-gray-200 rounded animate-pulse"></div>
+          )}
+
+          {/* Mobile View Skeleton */}
+          <div className="flex xl:hidden flex-col gap-3">
+            {[...Array(5)].map((_, i) => (
+              <div
+                key={i}
+                className="p-5 rounded-2xl border border-gray-300 flex items-center animate-pulse"
+              >
+                <div className="flex flex-1 flex-col gap-3">
+                  <div className="flex flex-col gap-1">
+                    <div className="h-5 w-32 bg-gray-200 rounded"></div>
+                    <div className="h-4 w-40 bg-gray-200 rounded"></div>
+                    <div className="h-4 w-36 bg-gray-200 rounded"></div>
+                  </div>
+                  <div className="h-6 w-20 bg-gray-200 rounded-full"></div>
+                </div>
+                <div className="h-6 w-16 bg-gray-200 rounded"></div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop Table Skeleton */}
+          <div className="hidden xl:flex rounded-2xl overflow-hidden border border-gray-300 w-full">
+            <table className="w-full text-sm text-left">
+              <thead className="border-b border-gray-300 bg-gray-100">
+                <tr>
+                  {[...Array(6)].map((_, i) => (
+                    <th key={i} className="px-6 py-3">
+                      <div className="h-4 w-24 bg-gray-300 rounded animate-pulse"></div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[...Array(10)].map((_, i) => (
+                  <tr key={i} className="border-b border-gray-300">
+                    {[...Array(6)].map((_, j) => (
+                      <td key={j} className="px-6 py-4">
+                        <div className="h-4 w-20 bg-gray-200 rounded animate-pulse"></div>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination Skeleton */}
+          <div className="flex items-center justify-center lg:justify-end">
+            <div className="inline-flex h-8 w-48 bg-gray-200 rounded-xl animate-pulse"></div>
+          </div>
         </div>
       </div>
-    </div>
-  );
-
-  const ImageSkeleton = () => (
-    <div className="border border-gray-300 bg-gray-100 rounded-lg h-64 sm:h-72 flex items-center justify-center animate-pulse">
-      <div className="w-full h-full bg-gray-200 rounded-lg"></div>
     </div>
   );
 
@@ -601,37 +969,90 @@ export default function TopUpRequests() {
   );
 
   return (
-    <div className="flex flex-col xl:flex-1 gap-4">
-      {/* Total Pending Request Card (unchanged) */}
-      <div className="flex relative rounded-2xl bg-linear-to-r from-yellow-400 via-yellow-300 to-yellow-400 p-5">
-        <div className="flex flex-1 flex-col gap-2 ">
-          <span className="text-2xl sm:text-3xl font-bold">
-            {loading ? "..." : pendingRequestsItems.length}
-          </span>
-          <div className="flex flex-col">
-            <span className="text-sm sm:text-base text-gray-800 font-medium">
-              Total Pending Requests
+    <div className="flex flex-col xl:flex-1 gap-4 relative">
+      {/* Skeleton Loader with fade transition */}
+      <div className={`absolute inset-0 z-10 transition-opacity duration-500 ${
+        (loading || historyLoading) ? "opacity-100" : "opacity-0 pointer-events-none"
+      }`}>
+        <SkeletonLoader />
+      </div>
+      
+      {/* Content with fade transition */}
+      <div className={`transition-opacity duration-500 ${
+        (loading || historyLoading) ? "opacity-0" : "opacity-100"
+      }`}>
+        {/* Total Card - Dynamic based on active tab with integrated tab button */}
+        <div className={`flex relative rounded-2xl overflow-hidden text-white ${
+          activeTab === "pending"
+            ? "bg-linear-to-r from-yellow-500 via-yellow-400 to-yellow-500"
+            : "bg-linear-to-r from-blue-500 via-blue-400 to-blue-500"
+        }`}>
+          <div className="flex flex-1 flex-col gap-2 p-5">
+            <span className="text-2xl sm:text-3xl font-bold">
+              {activeTab === "pending"
+                ? pendingRequestsItems.length
+                : historyItems.length}
             </span>
-            <span className="text-xs text-gray-600 ">
-              As of {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-            </span>
+            <div className="flex flex-col">
+              <span className="text-sm sm:text-base font-semibold text-white">
+                {activeTab === "pending"
+                  ? "Total Pending Requests"
+                  : "Total Top-up Requests History"}
+              </span>
+              <span className="text-xs text-gray-100">
+                As of {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+              </span>
+            </div>
+          </div>
+          
+          {/* Icon - Positioned at right edge, vertically centered */}
+          <div className={`absolute top-1/2 -translate-y-1/2 right-[60px] sm:right-[80px] rounded-full p-3 shadow-600/40 ${
+            activeTab === "pending"
+              ? "bg-yellow-600/40 shadow-yellow-600/40"
+              : "bg-blue-600/40 shadow-blue-600/40"
+          }`}>
+            <BanknoteArrowUp className="size-6 sm:size-7" />
+          </div>
+          
+          {/* Tab Switcher Button - Full Height */}
+          <div className="flex pr-0">
+            <button
+              onClick={() => {
+                if (activeTab === "pending") {
+                  setActiveTab("history");
+                  setHistoryLoading(true); // Set loading immediately
+                  setHistoryPage(1);
+                  setHistorySearchQuery("");
+                  setDebouncedHistoryQuery("");
+                } else {
+                  setActiveTab("pending");
+                  setLoading(true); // Set loading immediately
+                  setCurrentPage(1);
+                  setSearchQuery("");
+                  setDebouncedQuery("");
+                }
+              }}
+              className={`rounded-tr-2xl rounded-br-2xl px-4 sm:px-6 py-5 flex items-center justify-center transition-colors duration-150 ${
+                activeTab === "pending"
+                  ? "bg-yellow-600/40 hover:bg-yellow-600/50 active:bg-yellow-600/60"
+                  : "bg-blue-600/40 hover:bg-blue-600/50 active:bg-blue-600/60"
+              }`}
+            >
+              <ChevronRight className="size-5 sm:size-6 text-white" />
+            </button>
           </div>
         </div>
-        <div className="absolute top-3 right-3 rounded-full p-3 bg-yellow-500 shadow-yellow-500">
-          <BanknoteArrowUp className="size-6 sm:size-7" />
-        </div>
-      </div>
 
-      {/* content (unchanged) */}
-      <div className="flex flex-col gap-4">
-        {/* search bar and sort filter */}
-        <div className="flex flex-col md:flex-row gap-4">
-          <form action="" className="flex flex-1">
+        {/* content */}
+        <div className="flex flex-col gap-4">
+        {activeTab === "pending" ? (
+          <>
+          {/* search bar and sort filter */}
+          <div className="flex flex-col gap-4">
+          {/* Search Bar */}
+          <form className="flex">
             <div className="flex flex-col gap-1 w-full">
-              <label
-                htmlFor=""
-                className="text-xs sm:text-sm font-semibold text-gray-500"
-              >
+              <label className="text-xs sm:text-sm font-semibold text-gray-500 mt-2">
                 Search users
               </label>
               <div className="relative">
@@ -640,14 +1061,18 @@ export default function TopUpRequests() {
                   value={searchQuery}
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
+                    setCurrentPage(1);
                   }}
-                  placeholder="Search by Name or RFID No."
-                  className={fieldClass}
+                  placeholder="Supports comma-separated search"
+                  className="px-3 sm:px-4 py-3 w-full border border-gray-300 outline-none rounded-lg focus:border-green-500 placeholder:text-gray-500 transition-colors duration-150 pe-20 sm:pe-21"
                 />
                 {searchQuery.length > 0 && (
                   <button
                     type="button"
-                    onClick={() => setSearchQuery("")}
+                    onClick={() => {
+                      setSearchQuery("");
+                      setCurrentPage(1);
+                    }}
                     className="absolute px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-100/90 active:bg-gray-200 cursor-pointer transition-colors duration-150 top-2 right-2 text-xs"
                   >
                     Clear
@@ -657,48 +1082,43 @@ export default function TopUpRequests() {
             </div>
           </form>
           
-          {/* Sort Filter */}
-          <div className="flex flex-col gap-1 md:w-48">
-            <label
-              htmlFor="sort"
-              className="text-xs sm:text-sm font-semibold text-gray-500"
-            >
-              Sort by
-            </label>
-            <div className="relative">
-              <select
-                id="sort"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="px-3 sm:px-4 py-3 w-full border border-gray-300 outline-none rounded-lg focus:border-green-500 transition-colors duration-150 appearance-none bg-white pr-10"
+          {/* Sort Filters */}
+          <div className="flex flex-col gap-2">
+            <span className="text-xs sm:text-sm font-semibold text-gray-500">
+              Sort filters
+            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Sort By Filter Buttons */}
+              <button
+                onClick={() => setSortBy("date")}
+                className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors duration-150 ${
+                  sortBy === "date"
+                    ? "bg-green-500 text-white border border-green-500"
+                    : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 active:bg-gray-100"
+                }`}
               >
-                <option value="date">Date</option>
-                <option value="name">Name</option>
-                <option value="rfid">RFID No.</option>
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 size-4 pointer-events-none" />
-            </div>
-          </div>
-          
-          {/* Sort Order */}
-          <div className="flex flex-col gap-1 md:w-36">
-            <label
-              htmlFor="sortOrder"
-              className="text-xs sm:text-sm font-semibold text-gray-500"
-            >
-              Order
-            </label>
-            <div className="relative">
-              <select
-                id="sortOrder"
-                value={sortOrder}
-                onChange={(e) => setSortOrder(e.target.value)}
-                className="px-3 sm:px-4 py-3 w-full border border-gray-300 outline-none rounded-lg focus:border-green-500 transition-colors duration-150 appearance-none bg-white pr-10"
+                Date
+              </button>
+              <button
+                onClick={() => setSortBy("name")}
+                className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors duration-150 ${
+                  sortBy === "name"
+                    ? "bg-green-500 text-white border border-green-500"
+                    : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 active:bg-gray-100"
+                }`}
               >
-                <option value="desc">Descending</option>
-                <option value="asc">Ascending</option>
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 size-4 pointer-events-none" />
+                Name
+              </button>
+              <button
+                onClick={() => setSortBy("rfid")}
+                className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors duration-150 ${
+                  sortBy === "rfid"
+                    ? "bg-green-500 text-white border border-green-500"
+                    : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 active:bg-gray-100"
+                }`}
+              >
+                RFID No.
+              </button>
             </div>
           </div>
         </div>
@@ -710,13 +1130,7 @@ export default function TopUpRequests() {
 
           {/* items (mobile) */}
           <div className="flex xl:hidden flex-col gap-3">
-            {loading ? (
-              <>
-                {[...Array(5)].map((_, i) => (
-                  <SkeletonRow key={i} />
-                ))}
-              </>
-            ) : itemsToDisplay.length === 0 ? (
+            {itemsToDisplay.length === 0 ? (
               <EmptyState />
             ) : (
               itemsToDisplay.map((item) => (
@@ -725,10 +1139,14 @@ export default function TopUpRequests() {
                   onClick={() => handleViewRequest(item)}
                   className="p-5 cursor-pointer rounded-2xl border border-gray-300 flex items-center hover:bg-gray-50 active:bg-gray-100 transition-colors duration-150"
                 >
-                  {/* name, rfid, status */}
+                  {/* transaction id, name, rfid, status */}
                   <div className="flex flex-1 text-left flex-col gap-3">
-                    {/* name and rfid details */}
+                    {/* transaction id, name and rfid details */}
                     <div className="flex flex-col">
+                      {/* transaction id */}
+                      <span className="font-semibold text-xs sm:text-sm">
+                        {formatTransactionId(item.paymentMethod, item.documentId)}
+                      </span>
                       {/* name */}
                       <span className="font-semibold">{item.name}</span>
                       {/* rfid */}
@@ -759,16 +1177,15 @@ export default function TopUpRequests() {
 
           {/* items (table) */}
           <div className="hidden xl:flex rounded-2xl overflow-hidden border border-gray-300 w-full">
-            {loading ? (
-              <div className="w-full">
-                <TableSkeleton />
-              </div>
-            ) : itemsToDisplay.length === 0 ? (
+            {itemsToDisplay.length === 0 ? (
               <EmptyState />
             ) : (
               <table className="w-full text-sm text-left rtl:text-right text-body">
                 <thead className="border-b border-gray-300 bg-gray-100 ">
                   <tr>
+                    <th scope="col" className="px-6 py-3 font-medium">
+                      Transaction ID
+                    </th>
                     <th scope="col" className="px-6 py-3 font-medium">
                       Name
                     </th>
@@ -790,6 +1207,9 @@ export default function TopUpRequests() {
                   {itemsToDisplay.map((item) => (
                     <tr key={item.id} className="border-b border-gray-300">
                       <td scope="row" className="px-6 py-4">
+                        {formatTransactionId(item.paymentMethod, item.documentId)}
+                      </td>
+                      <td className="px-6 py-4">
                         {item.name}
                       </td>
                       <td className="px-6 py-4">{item.rfid}</td>
@@ -821,29 +1241,44 @@ export default function TopUpRequests() {
           {/* pagination */}
           {!isSearching && (
             <div className="flex items-center justify-center lg:justify-end">
-              <div className="inline-flex text-xs">
+              <div className="inline-flex text-xs items-center gap-1">
                 <button
-                  onClick={() =>
-                    currentPage > 1 && setCurrentPage(currentPage - 1)
-                  }
-                  className="rounded-tl-2xl rounded-bl-2xl border border-gray-300 p-2 hover:bg-gray-50 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+                  onClick={() => {
+                    if (currentPage > 1) {
+                      setCurrentPage(currentPage - 1);
+                    }
+                  }}
+                  className="rounded-tl-2xl rounded-bl-2xl border border-gray-300 p-2 hover:bg-gray-50 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed transition-colors duration-150"
                   disabled={currentPage <= 1}
-                  aria-label="Previous Page"
                 >
                   <ChevronLeft className="size-4" />
                 </button>
 
-                <div className="border-t border-b border-gray-300 px-4 py-2 flex items-center">
-                  Page {currentPage} of {totalPages}
+                {/* Page Number Buttons */}
+                <div className="flex items-center border-t border-b border-gray-300">
+                  {getVisiblePages().map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => handlePageClick(page)}
+                      className={`px-3 py-2 border-x border-gray-300 hover:bg-gray-50 active:bg-gray-100 transition-colors duration-150 ${
+                        currentPage === page
+                          ? "bg-green-500 text-white hover:bg-green-600 font-semibold"
+                          : "text-gray-700"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
                 </div>
 
                 <button
-                  onClick={() =>
-                    currentPage < totalPages && setCurrentPage(currentPage + 1)
-                  }
-                  className="rounded-tr-2xl rounded-br-2xl border border-gray-300 p-2 hover:bg-gray-50 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
-                  disabled={currentPage >= totalPages}
-                  aria-label="Next Page"
+                  onClick={() => {
+                    if (currentPage < totalPages && currentPage < 5) {
+                      setCurrentPage(currentPage + 1);
+                    }
+                  }}
+                  className="rounded-tr-2xl rounded-br-2xl border border-gray-300 p-2 hover:bg-gray-50 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed transition-colors duration-150"
+                  disabled={currentPage >= totalPages || currentPage >= 5}
                 >
                   <ChevronRight className="size-4" />
                 </button>
@@ -851,78 +1286,189 @@ export default function TopUpRequests() {
             </div>
           )}
         </div>
-      </div>
+        </>
+        ) : (
+          <>
+          {/* History Tab Content */}
+          {/* search bar and sort filter */}
+          <div className="flex flex-col gap-4">
+          {/* Search Bar */}
+          <form className="flex">
+            <div className="flex flex-col gap-1 w-full">
+              <label className="text-xs sm:text-sm font-semibold text-gray-500 mt-2">
+                Search history
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={historySearchQuery}
+                  onChange={(e) => {
+                    setHistorySearchQuery(e.target.value);
+                    setHistoryPage(1);
+                  }}
+                  placeholder="Supports comma-separated search"
+                  className="px-3 sm:px-4 py-3 w-full border border-gray-300 outline-none rounded-lg focus:border-green-500 placeholder:text-gray-500 transition-colors duration-150 pe-20 sm:pe-21"
+                />
+                {historySearchQuery.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHistorySearchQuery("");
+                      setHistoryPage(1);
+                    }}
+                    className="absolute px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-100/90 active:bg-gray-200 cursor-pointer transition-colors duration-150 top-2 right-2 text-xs"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+          </form>
+          
+          {/* Sort Filters */}
+          <div className="flex flex-col gap-2">
+            <span className="text-xs sm:text-sm font-semibold text-gray-500">
+              Sort filters
+            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Sort By Filter Buttons */}
+              <button
+                onClick={() => setHistorySortBy("date")}
+                className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors duration-150 ${
+                  historySortBy === "date"
+                    ? "bg-green-500 text-white border border-green-500"
+                    : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 active:bg-gray-100"
+                }`}
+              >
+                Date
+              </button>
+              <button
+                onClick={() => setHistorySortBy("name")}
+                className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors duration-150 ${
+                  historySortBy === "name"
+                    ? "bg-green-500 text-white border border-green-500"
+                    : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 active:bg-gray-100"
+                }`}
+              >
+                Name
+              </button>
+              <button
+                onClick={() => setHistorySortBy("rfid")}
+                className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors duration-150 ${
+                  historySortBy === "rfid"
+                    ? "bg-green-500 text-white border border-green-500"
+                    : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 active:bg-gray-100"
+                }`}
+              >
+                RFID No.
+              </button>
+            </div>
+          </div>
+        </div>
 
-      {/* Top-up Logs Section */}
-      <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
-          <span className="text-xs sm:text-sm font-semibold text-gray-500">
-            Top-up Logs
-          </span>
+          <div className="flex flex-col gap-2">
+            <span className="text-xs sm:text-sm font-semibold text-gray-500">
+              Top-up History
+            </span>
+            
+            {/* Status Filter Buttons */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setHistoryStatusFilter("all")}
+                className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors duration-150 ${
+                  historyStatusFilter === "all"
+                    ? "bg-green-500 text-white border border-green-500"
+                    : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 active:bg-gray-100"
+                }`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setHistoryStatusFilter("approved")}
+                className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors duration-150 ${
+                  historyStatusFilter === "approved"
+                    ? "bg-green-500 text-white border border-green-500"
+                    : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 active:bg-gray-100"
+                }`}
+              >
+                Approved
+              </button>
+              <button
+                onClick={() => setHistoryStatusFilter("rejected")}
+                className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors duration-150 ${
+                  historyStatusFilter === "rejected"
+                    ? "bg-green-500 text-white border border-green-500"
+                    : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 active:bg-gray-100"
+                }`}
+              >
+                Rejected
+              </button>
+            </div>
+          </div>
 
           {/* items (mobile) */}
           <div className="flex xl:hidden flex-col gap-3">
-            {logsLoading ? (
-              <>
-                {[...Array(5)].map((_, i) => (
-                  <SkeletonRow key={i} />
-                ))}
-              </>
-            ) : topUpLogs.length === 0 ? (
+            {historyItemsToDisplay.length === 0 ? (
               <EmptyState />
             ) : (
-              topUpLogs.map((item) => {
-                const dateTime = item.processedAt instanceof Date ? item.processedAt : new Date(item.processedAt);
-                const formattedDate = dateTime.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-                const formattedTime = dateTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
-                
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => handleViewRequest(item)}
-                    className="p-5 cursor-pointer rounded-2xl border border-gray-300 flex items-center hover:bg-gray-50 active:bg-gray-100 transition-colors duration-150"
-                  >
-                    <div className="flex flex-1 text-left flex-col gap-3">
-                      <div className="flex flex-col">
-                        <span className="font-semibold">{item.userName}</span>
-                        <span className="text-xs sm:text-sm text-gray-500">
-                          RFID No: {item.userId}
-                        </span>
-                      </div>
-                      <div className="flex items-center">
-                        <div className={`flex items-center px-4 py-1 rounded-full text-xs text-white ${
-                          item.status === "approved" ? "bg-green-500" : "bg-red-500"
-                        }`}>
-                          <span>{item.status}</span>
-                        </div>
+              historyItemsToDisplay.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => handleViewRequest(item)}
+                  className="p-5 cursor-pointer rounded-2xl border border-gray-300 flex items-center hover:bg-gray-50 active:bg-gray-100 transition-colors duration-150"
+                >
+                  {/* transaction id, name, rfid, status */}
+                  <div className="flex flex-1 text-left flex-col gap-3">
+                    {/* transaction id, name and rfid details */}
+                    <div className="flex flex-col">
+                      {/* transaction id */}
+                      <span className="font-semibold text-xs sm:text-sm">
+                        {formatTransactionId(item.paymentMethod, item.documentId)}
+                      </span>
+                      {/* name */}
+                      <span className="font-semibold">{item.name}</span>
+                      {/* rfid */}
+                      <span className="text-xs sm:text-sm text-gray-500">
+                        RFID No: {item.rfid}
+                      </span>
+                    </div>
+                    {/* status */}
+                    <div className="flex items-center">
+                      <div className={`flex items-center px-4 py-1 rounded-full text-xs text-white ${
+                        item.status.toLowerCase() === "approved" 
+                          ? "bg-green-500" 
+                          : "bg-red-500"
+                      }`}>
+                        <span>{item.status}</span>
                       </div>
                     </div>
-                    <div className="flex items-center justify-center">
-                      <div className="flex items-center gap-1 text-green-500">
-                        <Plus className="size-5 sm:size-6" />
-                        <span className="text-base sm:text-lg font-semibold">
-                          {item.amount.toFixed(2)}
-                        </span>
-                      </div>
+                  </div>
+                  {/* amount top-up */}
+                  <div className="flex items-center justif-center">
+                    <div className="flex items-center gap-1 text-green-500">
+                      <Plus className="size-5 sm:size-6" />
+                      <span className="text-base sm:text-lg font-semibold">
+                        {item.amount.toFixed(2)}
+                      </span>
                     </div>
-                  </button>
-                );
-              })
+                  </div>
+                </button>
+              ))
             )}
           </div>
 
           {/* items (table) */}
           <div className="hidden xl:flex rounded-2xl overflow-hidden border border-gray-300 w-full">
-            {logsLoading ? (
-              <div className="w-full">
-                <TableSkeleton />
-              </div>
-            ) : topUpLogs.length === 0 ? (
+            {historyItemsToDisplay.length === 0 ? (
               <EmptyState />
             ) : (
               <table className="w-full text-sm text-left rtl:text-right text-body">
-                <thead className="border-b border-gray-300 bg-gray-100">
+                <thead className="border-b border-gray-300 bg-gray-100 ">
                   <tr>
+                    <th scope="col" className="px-6 py-3 font-medium">
+                      Transaction ID
+                    </th>
                     <th scope="col" className="px-6 py-3 font-medium">
                       Name
                     </th>
@@ -936,191 +1482,262 @@ export default function TopUpRequests() {
                       Amount
                     </th>
                     <th scope="col" className="px-6 py-3 font-medium">
-                      Date and Time
-                    </th>
-                    <th scope="col" className="px-6 py-3 font-medium">
                       Action
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {topUpLogs.map((item) => {
-                    const dateTime = item.processedAt instanceof Date ? item.processedAt : new Date(item.processedAt);
-                    const formattedDateTime = dateTime.toLocaleString('en-US', { 
-                      month: 'long', 
-                      day: 'numeric', 
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit',
-                      hour12: true
-                    });
-                    
-                    return (
-                      <tr key={item.id} className="border-b border-gray-300">
-                        <td scope="row" className="px-6 py-4">
-                          {item.userName}
-                        </td>
-                        <td className="px-6 py-4">{item.userId}</td>
-                        <td className="px-6 py-4 flex">
-                          <div className={`text-xs px-4 py-1 rounded-full text-white ${
-                            item.status === "approved" ? "bg-green-500" : "bg-red-500"
-                          }`}>
-                            {item.status}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="text-green-500">
-                            P{item.amount.toFixed(2)}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          {formattedDateTime}
-                        </td>
-                        <td className="px-6 py-4">
-                          <button
-                            onClick={() => handleViewRequest(item)}
-                            className="rounded-lg px-4 py-1 bg-green-500 text-white text-xs cursor-pointer transition-colors duration-150 hover:bg-green-500/90 active:bg-green-600"
-                          >
-                            Review
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {historyItemsToDisplay.map((item) => (
+                    <tr key={item.id} className="border-b border-gray-300">
+                      <td scope="row" className="px-6 py-4">
+                        {formatTransactionId(item.paymentMethod, item.documentId)}
+                      </td>
+                      <td className="px-6 py-4">
+                        {item.name}
+                      </td>
+                      <td className="px-6 py-4">{item.rfid}</td>
+                      <td className="px-6 py-4 flex">
+                        <div className={`text-xs px-4 py-1 rounded-full text-white ${
+                          item.status.toLowerCase() === "approved" 
+                            ? "bg-green-500" 
+                            : "bg-red-500"
+                        }`}>
+                          {item.status}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-green-500">
+                          P{item.amount.toFixed(2)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => handleViewRequest(item)}
+                          className="rounded-lg px-4 py-1 bg-blue-500 text-white text-xs cursor-pointer transition-colors duration-150 hover:bg-blue-500/90 active:bg-blue-600"
+                        >
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             )}
           </div>
+
+          {/* pagination */}
+          {!isHistorySearching && (
+            <div className="flex items-center justify-center lg:justify-end">
+              <div className="inline-flex text-xs items-center gap-1">
+                <button
+                  onClick={() => {
+                    if (historyPage > 1) {
+                      setHistoryPage(historyPage - 1);
+                    }
+                  }}
+                  className="rounded-tl-2xl rounded-bl-2xl border border-gray-300 p-2 hover:bg-gray-50 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed transition-colors duration-150"
+                  disabled={historyPage <= 1}
+                >
+                  <ChevronLeft className="size-4" />
+                </button>
+
+                {/* Page Number Buttons */}
+                <div className="flex items-center border-t border-b border-gray-300">
+                  {getVisibleHistoryPages().map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => handleHistoryPageClick(page)}
+                      className={`px-3 py-2 border-x border-gray-300 hover:bg-gray-50 active:bg-gray-100 transition-colors duration-150 ${
+                        historyPage === page
+                          ? "bg-green-500 text-white hover:bg-green-600 font-semibold"
+                          : "text-gray-700"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => {
+                    if (historyPage < historyTotalPages && historyPage < 5) {
+                      setHistoryPage(historyPage + 1);
+                    }
+                  }}
+                  className="rounded-tr-2xl rounded-br-2xl border border-gray-300 p-2 hover:bg-gray-50 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed transition-colors duration-150"
+                  disabled={historyPage >= historyTotalPages || historyPage >= 5}
+                >
+                  <ChevronRight className="size-4" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
+        </>
+        )}
+      </div>
       </div>
 
       {/* pending request modal (Conditionally Rendered) */}
       {selectedRequest && !showRejectModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-start lg:items-center justify-center p-4 sm:p-5 z-50 overflow-y-auto">
-          <div className="rounded-2xl relative bg-white p-4 sm:p-5 w-full max-w-lg flex flex-col gap-6 mt-2 mb-2">
-            {/* close button */}
+        <div 
+          className={`fixed inset-0 bg-black/60 flex items-center justify-center p-4 sm:p-5 z-50 overflow-y-auto transition-opacity duration-300 ${
+            isClosing ? "opacity-0" : "opacity-100"
+          }`}
+          onClick={closeAllModals}
+        >
+          <div 
+            className={`rounded-2xl relative bg-white w-full max-w-5xl flex flex-col gap-3 mt-2 mb-2 transition-all duration-300 ease-in-out ${
+              isClosing 
+                ? "translate-y-[150vh] opacity-0 scale-95" 
+                : isOpening
+                ? "translate-y-0 opacity-100 scale-100"
+                : "translate-y-[20px] opacity-0 scale-[0.95]"
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* CLOSE BUTTON - Top Middle */}
             <button
               onClick={closeAllModals}
-              className="p-2 cursor-pointer rounded-full hover:bg-gray-50 active:bg-gray-100 transition-colors duration-150 text-gray-500 absolute top-2 sm:top-3 right-2 sm:right-3"
+              className="absolute top-[-16px] left-1/2 transform -translate-x-1/2 z-10 p-2 cursor-pointer rounded-full bg-white border-2 border-gray-300 hover:bg-gray-50 hover:border-gray-400 active:bg-gray-100 transition-all duration-150 text-gray-600 shadow-lg"
             >
-              <X className="size-4 sm:size-5" />
+              <ChevronDown className="size-5 sm:size-6" />
             </button>
-            {/* header */}
-            <div className="flex flex-col gap-4 items-center justify-center py-2">
-              <div className="rounded-full p-3 bg-yellow-400 shadow-yellow-500">
-                <BanknoteArrowUp className="size-6 sm:size-7" />
-              </div>
 
-              <div className="flex flex-col text-center">
-                <span className="text-base sm:text-lg font-semibold text-yellow-500">
-                  Pending Request
+            {/* HEADER CARD - Dynamic based on active tab */}
+            <div className={`flex relative rounded-t-2xl p-4 sm:p-5 text-white ${
+              activeTab === "pending"
+                ? "bg-linear-to-r from-yellow-500 via-yellow-400 to-yellow-500"
+                : selectedRequest?.status?.toLowerCase() === "approved"
+                ? "bg-linear-to-r from-green-500 via-green-400 to-green-500"
+                : "bg-linear-to-r from-red-500 via-red-400 to-red-500"
+            }`}>
+              <div className="flex flex-1 flex-col gap-1">
+                <span className="text-xl sm:text-2xl font-bold">
+                  {selectedRequest.name}
                 </span>
-                <span className="text-gray-500 text-xs sm:text-sm">
-                  {selectedRequest.date} {selectedRequest.time || ""}
-                </span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs sm:text-sm font-semibold text-white">
+                    RFID No. {selectedRequest.rfid}
+                  </span>
+                  <span className="text-xs text-gray-100">
+                    {selectedRequest.date} {selectedRequest.time || ""}
+                  </span>
+                </div>
+              </div>
+              <div className={`absolute top-3 right-3 rounded-full p-2.5 sm:p-3 shadow-600/40 ${
+                activeTab === "pending"
+                  ? "bg-yellow-600/40 shadow-yellow-600/40"
+                  : selectedRequest?.status?.toLowerCase() === "approved"
+                  ? "bg-green-600/40 shadow-green-600/40"
+                  : "bg-red-600/40 shadow-red-600/40"
+              }`}>
+                <BanknoteArrowUp className="size-5 sm:size-6" />
               </div>
             </div>
 
-            {/* name + amount */}
-            <div className="flex py-2 items-center">
-              <div className="flex flex-1 flex-col">
-                <span className="font-semibold">{selectedRequest.name}</span>
-                <span className="text-gray-500 text-xs sm:text-sm">
-                  RFID No. {selectedRequest.rfid}
-                </span>
+            {/* MAIN CONTENT */}
+            <div className="flex flex-col gap-3 p-4 sm:p-5">
+              {/* Amount Card */}
+              <div className="flex flex-col gap-3 p-4 rounded-lg border border-gray-300 bg-gray-50">
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs sm:text-sm text-gray-500">Amount</span>
+                    <span className="font-semibold text-base text-green-600">
+                      ₱{selectedRequest.amount?.toLocaleString() || selectedRequest.amount.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              <div className="flex items-center gap-1 text-green-500">
-                <Plus className="size-5 sm:size-6" />
-                <span className="text-xl sm:text-2xl font-semibold">
-                  {selectedRequest.amount.toFixed(2)}
+              {/* Transaction Details */}
+              <div className="flex flex-col gap-2">
+                <span className="text-xs sm:text-sm font-semibold text-gray-500">
+                  Transaction Details
                 </span>
-              </div>
-            </div>
 
-            {/* transaction details */}
-            <div className="flex flex-col gap-3">
-              <span className="text-xs sm:text-sm font-semibold text-gray-500">
-                Transaction Details
-              </span>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-1 flex flex-col p-2.5 sm:p-3 rounded-lg border border-gray-300">
+                    <span className="text-gray-500 text-xs mb-0.5">
+                      Transaction ID
+                    </span>
+                    <span className="font-semibold text-xs sm:text-sm">
+                      {formatTransactionId(selectedRequest.paymentMethod, selectedRequest.documentId)}
+                    </span>
+                  </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-1 flex flex-col p-3 rounded-lg border border-gray-300">
-                  <span className="text-gray-500 text-xs sm:text-sm">
-                    Transaction ID
-                  </span>
-                  <span className="font-semibold text-sm sm:text-base">
-                    {formatTransactionId(selectedRequest.documentId)}
-                  </span>
-                </div>
+                  <div className="col-span-1 flex flex-col p-2.5 sm:p-3 rounded-lg border border-gray-300">
+                    <span className="text-gray-500 text-xs mb-0.5">
+                      Payment Method
+                    </span>
+                    <span className="font-semibold text-xs sm:text-sm">
+                      {selectedRequest.paymentMethod}
+                    </span>
+                  </div>
 
-                <div className="col-span-1 flex flex-col p-3 rounded-lg border border-gray-300">
-                  <span className="text-gray-500 text-xs sm:text-sm">
-                    Payment Method
-                  </span>
-                  <span className="font-semibold text-sm sm:text-base">
-                    {selectedRequest.paymentMethod}
-                  </span>
-                </div>
-
-                <div className="col-span-2 flex flex-col p-3 rounded-lg border border-gray-300">
-                  <span className="text-gray-500 text-xs sm:text-sm">
-                    Reference Number
-                  </span>
-                  <span className="font-semibold text-sm sm:text-base">
-                    {selectedRequest.referenceNumber}
-                  </span>
-                </div>
-
-                <div className="col-span-2 flex flex-col rounded-lg mb-2 gap-2">
-                  <span className="text-gray-500 text-xs sm:text-sm">
-                    Proof of payment
-                  </span>
-                  {selectedRequest.receiptURL ? (
-                    <div 
-                      className="border border-gray-300 bg-gray-100 rounded-lg overflow-hidden cursor-pointer hover:border-green-500 transition-colors duration-150 relative"
-                      onClick={() => handleImageClick(selectedRequest.receiptURL)}
-                    >
-                      {imageLoading && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 animate-pulse">
-                          <div className="w-full h-full bg-gray-200"></div>
-                        </div>
-                      )}
-                      <img
-                        src={selectedRequest.receiptURL}
-                        alt="Receipt"
-                        className={`w-full h-64 sm:h-72 object-contain ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
-                        onLoad={handleImageLoad}
-                        onError={() => setImageLoading(false)}
-                      />
-                    </div>
-                  ) : (
-                    <div className="border border-dashed border-gray-300 bg-gray-100 rounded-lg h-64 sm:h-72 flex items-center justify-center">
-                      <span className="text-gray-400 text-xs">No receipt image</span>
+                  {/* Reference Number - Only show if payment method is not Cash */}
+                  {selectedRequest.paymentMethod?.toLowerCase() !== "cash" && (
+                    <div className="col-span-2 flex flex-col p-2.5 sm:p-3 rounded-lg border border-gray-300">
+                      <span className="text-gray-500 text-xs mb-0.5">
+                        Reference Number
+                      </span>
+                      <span className="font-semibold text-xs sm:text-sm break-all">
+                        {selectedRequest.referenceNumber}
+                      </span>
                     </div>
                   )}
+
+                  <div className="col-span-2 flex flex-col rounded-lg gap-2">
+                    <span className="text-gray-500 text-xs sm:text-sm">
+                      Proof of payment
+                    </span>
+                    {selectedRequest.receiptURL ? (
+                      <div 
+                        className="border border-gray-300 bg-gray-100 rounded-lg overflow-hidden cursor-pointer hover:border-green-500 transition-colors duration-150 relative"
+                        onClick={() => handleImageClick(selectedRequest.receiptURL)}
+                      >
+                        {imageLoading && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-gray-100 animate-pulse">
+                            <div className="w-full h-full bg-gray-200"></div>
+                          </div>
+                        )}
+                        <img
+                          src={selectedRequest.receiptURL}
+                          alt="Receipt"
+                          className={`w-full h-64 sm:h-72 object-contain ${imageLoading ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}
+                          onLoad={handleImageLoad}
+                          onError={() => setImageLoading(false)}
+                        />
+                      </div>
+                    ) : (
+                      <div className="border border-dashed border-gray-300 bg-gray-100 rounded-lg h-64 sm:h-72 flex items-center justify-center">
+                        <span className="text-gray-400 text-xs">No receipt image</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* buttons */}
-              <div className="flex gap-2 items-center w-full">
-                <button
-                  onClick={() => handleReject(selectedRequest)}
-                  disabled={processing}
-                  className="rounded-lg w-full cursor-pointer px-4 py-2 border border-red-500 bg-red-500 text-white hover:bg-red-500/90 active:bg-red-600 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Reject
-                </button>
+              {/* buttons - Only show for pending tab */}
+              {activeTab === "pending" && (
+                <div className="flex gap-2 items-center justify-end w-full mt-2">
+                  <button
+                    onClick={() => handleReject(selectedRequest)}
+                    disabled={processing}
+                    className="bg-red-500 text-white rounded-lg px-4 py-2 hover:bg-red-500/90 active:bg-red-600 transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Reject
+                  </button>
 
-                <button 
-                  onClick={handleApprove}
-                  disabled={processing}
-                  className="rounded-lg w-full cursor-pointer px-4 py-2 border border-green-500 bg-green-500 text-white hover:bg-green-500/90 active:bg-green-600 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {processing ? "Processing..." : "Approve"}
-                </button>
-              </div>
+                  <button 
+                    onClick={handleApprove}
+                    disabled={processing}
+                    className="bg-green-500 text-white rounded-lg px-4 py-2 hover:bg-green-500/90 active:bg-green-600 transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {processing ? "Processing..." : "Approve"}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1199,6 +1816,72 @@ export default function TopUpRequests() {
                 onError={() => setPreviewImageLoading(false)}
               />
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Modal */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 sm:p-5 z-[70] overflow-y-auto">
+          <div className="rounded-2xl bg-white p-4 sm:p-5 w-full max-w-md flex flex-col gap-6 mt-2 mb-2">
+            <div className="flex flex-col items-center justify-center gap-4 pt-2">
+              <div className="rounded-full p-3 bg-green-500 text-white">
+                <CheckCircle2 className="size-6 sm:size-7" />
+              </div>
+              <div className="flex flex-col text-center gap-1">
+                <span className="text-base sm:text-lg font-semibold text-green-500">
+                  Success
+                </span>
+                <span className="text-gray-500 text-xs sm:text-sm">
+                  {modalMessage}
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setShowSuccessModal(false);
+                // Close main modal after success
+                closeAllModals();
+              }}
+              className="rounded-lg w-full cursor-pointer px-4 py-2 border border-green-500 bg-green-500 text-white hover:bg-green-500/90 active:bg-green-600 transition-colors duration-150"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Error Modal */}
+      {showErrorModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 sm:p-5 z-[70] overflow-y-auto">
+          <div className="rounded-2xl bg-white p-4 sm:p-5 w-full max-w-md flex flex-col gap-6 mt-2 mb-2">
+            <div className="flex flex-col items-center justify-center gap-4 pt-2">
+              <div className="rounded-full p-3 bg-red-500 text-white">
+                <XCircle className="size-6 sm:size-7" />
+              </div>
+              <div className="flex flex-col text-center gap-1">
+                <span className="text-base sm:text-lg font-semibold text-red-500">
+                  Error
+                </span>
+                <span className="text-gray-500 text-xs sm:text-sm">
+                  {modalMessage}
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setShowErrorModal(false);
+                // If error happens, close the reject modal if it's open
+                if (showRejectModal) {
+                  setShowRejectModal(false);
+                }
+              }}
+              className="rounded-lg w-full cursor-pointer px-4 py-2 border border-red-500 bg-red-500 text-white hover:bg-red-500/90 active:bg-red-600 transition-colors duration-150"
+            >
+              OK
+            </button>
           </div>
         </div>
       )}

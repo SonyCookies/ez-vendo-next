@@ -1,27 +1,39 @@
 "use client";
 
 import {
-  ArchiveX,
   BanknoteArrowUp,
   CircleAlert,
   CircleCheckBig,
-  Plus,
-  ReceiptText,
-  Trash2,
-  UserSearch,
   UserX,
-  X,
+  Users,
+  ChevronDown,
+  UserRound,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { db } from "../../../../firebase";
-import { collection, getDocs, query, where, doc, getDoc, updateDoc, increment, addDoc, serverTimestamp, orderBy } from "firebase/firestore";
+import { collection, getDocs, query, where, doc, getDoc, updateDoc, increment, setDoc, serverTimestamp, orderBy } from "firebase/firestore";
 
 export default function ManualTopUp() {
-  const [searchModal, setSearchModal] = useState(false);
-  const [query, setQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [allUsers, setAllUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(true);
+  const [isClosing, setIsClosing] = useState(false);
+  const [isOpening, setIsOpening] = useState(false);
+  const [totalTopUps, setTotalTopUps] = useState(0);
+  const [topUpsLoading, setTopUpsLoading] = useState(true);
+  const [viewMode, setViewMode] = useState("search"); // "search" or "topups"
+  const [manualTopUps, setManualTopUps] = useState([]);
+  const [topUpsListLoading, setTopUpsListLoading] = useState(false);
+  const [paymentFilter, setPaymentFilter] = useState("all"); // "all", "Cash", "Gcash", "Maya", "Maribank", "GoTyme"
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   // Form state
   const [amount, setAmount] = useState("");
@@ -29,10 +41,7 @@ export default function ManualTopUp() {
   const [reference, setReference] = useState("");
   const [note, setNote] = useState("");
   const [showSuccess, setShowSuccess] = useState(false);
-  const [transactions, setTransactions] = useState([]);
-  const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [processing, setProcessing] = useState(false);
-  const [transactionsLoading, setTransactionsLoading] = useState(true);
 
   // Validation errors
   const [errors, setErrors] = useState({});
@@ -42,9 +51,25 @@ export default function ManualTopUp() {
     { id: 1, method: "Cash" },
     { id: 2, method: "Gcash" },
     { id: 3, method: "Maya" },
-    { id: 4, method: "SeaBank" },
+    { id: 4, method: "Maribank" },
     { id: 5, method: "GoTyme" },
   ];
+
+  // Get prefix for payment method
+  const getPaymentPrefix = (paymentMethod) => {
+    switch (paymentMethod) {
+      case "Gcash":
+        return "GCASH";
+      case "Maya":
+        return "MAYA";
+      case "Maribank":
+        return "MARI";
+      case "GoTyme":
+        return "GOTYME";
+      default:
+        return "";
+    }
+  };
 
   // Format transaction ID (EZ-****** where ****** is first 6 chars of document ID)
   const formatTransactionId = (documentId) => {
@@ -71,189 +96,335 @@ export default function ManualTopUp() {
     return date.toLocaleString('en-US', options);
   };
 
-  // Fetch all manual top-up transactions from Firestore
+  // Fetch total manual top-ups count
+  useEffect(() => {
+    const fetchTotalTopUps = async () => {
+      try {
+        setTopUpsLoading(true);
+        const manualTopUpRef = collection(db, "manual_topup");
+        const querySnapshot = await getDocs(manualTopUpRef);
+        setTotalTopUps(querySnapshot.size);
+      } catch (error) {
+        console.error("Error fetching total manual top-ups:", error);
+        setTotalTopUps(0);
+      } finally {
+        setTopUpsLoading(false);
+      }
+    };
+
+    fetchTotalTopUps();
+  }, []);
+
+  // Fetch manual top-ups list
   useEffect(() => {
     const fetchManualTopUps = async () => {
+      if (viewMode !== "topups") return;
+      
       try {
-        setTransactionsLoading(true);
+        setTopUpsListLoading(true);
         const manualTopUpRef = collection(db, "manual_topup");
-        
         let querySnapshot;
         try {
-          const q = query(
-            manualTopUpRef,
-            orderBy("requestedAt", "desc")
-          );
+          const q = query(manualTopUpRef, orderBy("requestedAt", "desc"));
           querySnapshot = await getDocs(q);
         } catch (error) {
-          console.warn("OrderBy failed, using simple query:", error);
+          console.warn("OrderBy failed for manual_topup, using simple query:", error);
           querySnapshot = await getDocs(manualTopUpRef);
         }
-        
-        const fetchedTransactions = [];
+
+        const topUpsData = [];
         querySnapshot.forEach((doc) => {
           const data = doc.data();
           const requestedAt = data.requestedAt?.toDate ? data.requestedAt.toDate() : (data.requestedAt ? new Date(data.requestedAt) : new Date());
           
-          fetchedTransactions.push({
-            id: formatTransactionId(doc.id),
+          topUpsData.push({
+            id: doc.id,
             documentId: doc.id,
             name: data.userName || "",
             rfid: data.userId || "",
             amount: data.amount || 0,
-            method: data.paymentMethod || "",
-            reference: data.referenceId || "",
+            paymentMethod: data.paymentMethod || "",
+            referenceId: data.referenceId || "",
+            transactionId: formatTransactionId(doc.id),
             datetime: requestedAt,
-            status: data.status || "approved",
           });
         });
         
-        // Sort by date if not already sorted
-        fetchedTransactions.sort((a, b) => {
+        // Sort by datetime descending
+        topUpsData.sort((a, b) => {
           const dateA = a.datetime instanceof Date ? a.datetime : new Date(a.datetime);
           const dateB = b.datetime instanceof Date ? b.datetime : new Date(b.datetime);
           return dateB - dateA;
         });
         
-        setTransactions(fetchedTransactions);
+        setManualTopUps(topUpsData);
       } catch (error) {
         console.error("Error fetching manual top-ups:", error);
       } finally {
-        setTransactionsLoading(false);
+        setTopUpsListLoading(false);
       }
     };
 
     fetchManualTopUps();
-  }, []); // Fetch on mount and after successful top-up
+  }, [viewMode]);
 
-  // Search users in Firestore
+  // Fetch all users from Firestore
   useEffect(() => {
-    const searchUsers = async () => {
-      if (!query.trim()) {
-        setFilteredUsers([]);
-        return;
-      }
-
+    const fetchUsers = async () => {
+      const startTime = Date.now();
       try {
         setSearchLoading(true);
         const usersRef = collection(db, "users");
-        const searchTerm = query.trim().toUpperCase(); // RFID is uppercase
-        const searchTermLower = query.trim().toLowerCase(); // For name search
-        const results = [];
-
-        // First, try to search by RFID (Document ID)
-        // Check if search term looks like an RFID (alphanumeric, typically uppercase)
-        const isLikelyRFID = /^[A-Z0-9]+$/i.test(query.trim());
+        const querySnapshot = await getDocs(usersRef);
         
-        if (isLikelyRFID) {
-          try {
-            const userDocRef = doc(db, "users", searchTerm);
-            const userDocSnap = await getDoc(userDocRef);
-            
-            if (userDocSnap.exists()) {
-              const userData = userDocSnap.data();
-              results.push({
-                id: userDocSnap.id,
-                rfid: userDocSnap.id,
-                name: userData.fullName || `${userData.firstName || ""} ${userData.lastName || ""}`.trim() || "Unknown",
-                balance: userData.balance || 0,
-                email: userData.email || "",
-              });
-            }
-          } catch (error) {
-            console.log("RFID search failed:", error);
-          }
-        }
-
-        // Search by name - get all users and filter client-side for better flexibility
-        const allUsersSnapshot = await getDocs(usersRef);
-        allUsersSnapshot.forEach((doc) => {
-          // Skip if already added from RFID search
-          if (results.find(u => u.id === doc.id)) return;
-
+        const usersData = [];
+        querySnapshot.forEach((doc) => {
           const userData = doc.data();
-          const fullName = userData.fullName || `${userData.firstName || ""} ${userData.lastName || ""}`.trim() || "";
-          const firstName = (userData.firstName || "").toLowerCase();
-          const lastName = (userData.lastName || "").toLowerCase();
-          const rfidLower = doc.id.toLowerCase();
-          
-          // Check if matches name or RFID
-          if (
-            fullName.toLowerCase().includes(searchTermLower) ||
-            firstName.includes(searchTermLower) ||
-            lastName.includes(searchTermLower) ||
-            rfidLower.includes(searchTermLower) ||
-            doc.id.toUpperCase().includes(searchTerm)
-          ) {
-            results.push({
-              id: doc.id,
-              rfid: doc.id, // Document ID is the RFID
-              name: fullName || "Unknown",
-              balance: userData.balance || 0,
-              email: userData.email || "",
-            });
-          }
+          usersData.push({
+            id: doc.id,
+            rfid: doc.id, // Document ID is the RFID
+            name: userData.fullName || `${userData.firstName || ""} ${userData.lastName || ""}`.trim() || "Unknown",
+            firstName: userData.firstName || "",
+            lastName: userData.lastName || "",
+            balance: userData.balance || 0,
+            email: userData.email || "",
+          });
         });
+        
+        setAllUsers(usersData);
 
-        // Remove duplicates and limit results
-        const uniqueResults = results
-          .filter((user, index, self) => index === self.findIndex((u) => u.id === user.id))
-          .slice(0, 20); // Limit to 20 results for performance
-
-        setFilteredUsers(uniqueResults);
+        // Ensure minimum 0.65 second loading time for smooth transition
+        const elapsedTime = Date.now() - startTime;
+        const minLoadingTime = 650; // 0.65 seconds
+        const remainingTime = Math.max(0, minLoadingTime - elapsedTime);
+        
+        if (remainingTime > 0) {
+          await new Promise(resolve => setTimeout(resolve, remainingTime));
+        }
       } catch (error) {
-        console.error("Error searching users:", error);
-        setFilteredUsers([]);
+        console.error("Error fetching users:", error);
+        
+        // Ensure minimum loading time even on error
+        const elapsedTime = Date.now() - startTime;
+        const minLoadingTime = 650;
+        const remainingTime = Math.max(0, minLoadingTime - elapsedTime);
+        
+        if (remainingTime > 0) {
+          await new Promise(resolve => setTimeout(resolve, remainingTime));
+        }
       } finally {
         setSearchLoading(false);
       }
     };
 
-    // Debounce search
-    const timer = setTimeout(() => {
-      searchUsers();
-    }, 300);
+    fetchUsers();
+  }, []);
 
-    return () => clearTimeout(timer);
-  }, [query]);
+  // DEBOUNCE LOGIC
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 200);
 
-  const handleSearchModal = () => {
-    setSearchModal((prev) => !prev);
-    setQuery("");
-  };
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
 
-  const handleSelectUser = async (user) => {
+  const effectiveQuery =
+    searchQuery.trim().length < 3
+      ? searchQuery.trim().toLowerCase()
+      : debouncedQuery.trim().toLowerCase();
+
+  // REAL-TIME FILTERING
+  useEffect(() => {
+    if (!effectiveQuery) {
+      setFilteredUsers([]);
+      return;
+    }
+
+    // Split by comma and trim each query
+    const queries = effectiveQuery.split(',').map(q => q.trim()).filter(q => q.length > 0);
+    
+    const filtered = allUsers.filter((user) => {
+      // Check if user matches any of the comma-separated queries
+      return queries.some((q) => {
+        const queryLower = q.toLowerCase();
+        return (
+          user.name.toLowerCase().startsWith(queryLower) ||
+          user.rfid?.toLowerCase().startsWith(queryLower) ||
+          user.email?.toLowerCase().startsWith(queryLower) ||
+          user.lastName?.toLowerCase().startsWith(queryLower) ||
+          user.firstName?.toLowerCase().startsWith(queryLower)
+        );
+      });
+    });
+
+    setFilteredUsers(filtered);
+  }, [effectiveQuery, allUsers]);
+
+  // OPEN MODAL
+  const openFormModal = async (user) => {
     try {
+      setIsClosing(false); // Reset closing state when opening
+      setIsOpening(false); // Start in initial position
+      
       // Fetch latest user data to get current balance
       const userDocRef = doc(db, "users", user.rfid);
       const userDocSnap = await getDoc(userDocRef);
       
+      let userData;
       if (userDocSnap.exists()) {
-        const userData = userDocSnap.data();
-        setSelectedUser({
+        const data = userDocSnap.data();
+        userData = {
           ...user,
-          balance: userData.balance || 0,
-          name: userData.fullName || user.name,
-        });
+          balance: data.balance || 0,
+          name: data.fullName || user.name,
+        };
       } else {
-        setSelectedUser(user);
+        userData = user;
       }
-      setSearchModal(false);
+      
+      setSelectedUser(userData);
+      
+      // Trigger opening animation on next frame
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setIsOpening(true);
+        });
+      });
     } catch (error) {
       console.error("Error fetching user data:", error);
       setSelectedUser(user);
-      setSearchModal(false);
+      // Trigger opening animation
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setIsOpening(true);
+        });
+      });
     }
   };
 
-  // Auto-generate reference number when Cash is selected
-  useEffect(() => {
-    if (method === "Cash") {
-      setReference("CASH-" + Math.floor(100000 + Math.random() * 900000));
-    } else {
+  // CLOSE MODAL with animation
+  const closeFormModal = () => {
+    if (isClosing) return; // Prevent multiple close calls
+    setIsOpening(false); // Stop opening animation
+    setIsClosing(true);
+    setTimeout(() => {
+      setSelectedUser(null);
+      setAmount("");
+      setMethod("Cash");
       setReference("");
-    }
+      setNote("");
+      setErrors({});
+      setShowGlobalError(false);
+      setIsClosing(false);
+    }, 300); // Match animation duration
+  };
+
+  // Clear search handler
+  const handleClear = () => {
+    setSearchQuery("");
+    setDebouncedQuery("");
+  };
+
+  // Auto-generate reference number when Cash is selected or set prefix for other methods
+  useEffect(() => {
+    const generateUniqueCashReference = async () => {
+      if (method === "Cash") {
+        let newReference;
+        let isUnique = false;
+        let attempts = 0;
+        const maxAttempts = 10;
+        
+        // Generate a unique reference number
+        while (!isUnique && attempts < maxAttempts) {
+          newReference = "CASH-" + Math.floor(100000 + Math.random() * 900000);
+          const checkDocRef = doc(db, "manual_topup", newReference);
+          const checkDoc = await getDoc(checkDocRef);
+          
+          if (!checkDoc.exists()) {
+            isUnique = true;
+            setReference(newReference);
+          }
+          attempts++;
+        }
+        
+        // If couldn't find unique after max attempts, just set the last generated one
+        if (!isUnique) {
+          setReference(newReference || "CASH-" + Math.floor(100000 + Math.random() * 900000));
+        }
+      } else {
+        // For non-Cash methods, set the prefix with a dash (fixed prefix)
+        const prefix = getPaymentPrefix(method);
+        if (prefix) {
+          // Always set to prefix + dash, user will type after it
+          setReference(prefix + "-");
+        } else {
+          setReference("");
+        }
+      }
+    };
+    
+    generateUniqueCashReference();
   }, [method]);
+
+  // Handle reference number input - prefix is fixed and cannot be deleted
+  const handleReferenceChange = (e) => {
+    if (method === "Cash") {
+      // Cash is auto-generated, don't allow manual input
+      return;
+    }
+    
+    const inputValue = e.target.value;
+    const prefix = getPaymentPrefix(method);
+    
+    if (!prefix) {
+      setReference(inputValue);
+      return;
+    }
+    
+    const prefixWithDash = prefix + "-";
+    
+    // If user tries to delete the prefix, prevent it
+    if (inputValue.length < prefixWithDash.length || !inputValue.startsWith(prefixWithDash)) {
+      // Restore the prefix
+      setReference(prefixWithDash);
+      return;
+    }
+    
+    // Allow user to type after the prefix
+    setReference(inputValue);
+  };
+
+  // Handle keydown to prevent deletion of prefix
+  const handleReferenceKeyDown = (e) => {
+    if (method === "Cash") return;
+    
+    const prefix = getPaymentPrefix(method);
+    if (!prefix) return;
+    
+    const prefixWithDash = prefix + "-";
+    
+    // If cursor is at the start or within the prefix, prevent deletion
+    const input = e.target;
+    const cursorPosition = input.selectionStart;
+    
+    if (cursorPosition <= prefixWithDash.length) {
+      // If backspace or delete is pressed within the prefix area
+      if (e.key === "Backspace" && cursorPosition > 0) {
+        e.preventDefault();
+        // Keep cursor at the end of prefix
+        setTimeout(() => {
+          input.setSelectionRange(prefixWithDash.length, prefixWithDash.length);
+        }, 0);
+      } else if (e.key === "Delete" && cursorPosition < prefixWithDash.length) {
+        e.preventDefault();
+      } else if (e.key === "ArrowLeft" && cursorPosition <= prefixWithDash.length) {
+        // Prevent moving cursor left of the prefix
+        e.preventDefault();
+        input.setSelectionRange(prefixWithDash.length, prefixWithDash.length);
+      }
+    }
+  };
 
   // validations
   const validateForm = () => {
@@ -281,15 +452,25 @@ export default function ManualTopUp() {
     try {
       setProcessing(true);
 
-      // Create manual_topup document in Firestore
-      const manualTopUpRef = collection(db, "manual_topup");
-      const manualTopUpDoc = await addDoc(manualTopUpRef, {
+      // Check if reference number already exists
+      const manualTopUpDocRef = doc(db, "manual_topup", reference);
+      const existingDoc = await getDoc(manualTopUpDocRef);
+      
+      if (existingDoc.exists()) {
+        alert("This reference number already exists. Please use a different reference number.");
+        setProcessing(false);
+        return;
+      }
+
+      // Create manual_topup document in Firestore with reference number as document ID
+      await setDoc(manualTopUpDocRef, {
         amount: Number(amount),
         paymentMethod: method,
         processedAt: serverTimestamp(),
         referenceId: reference,
         requestedAt: serverTimestamp(),
         status: "approved",
+        type: "manual",
         userEmail: selectedUser.email || "",
         userId: selectedUser.rfid,
         userName: selectedUser.name,
@@ -301,9 +482,8 @@ export default function ManualTopUp() {
         balance: increment(Number(amount)),
       });
 
-      // Format transaction ID from document ID
-      const transactionId = formatTransactionId(manualTopUpDoc.id);
-      const now = new Date();
+      // Format transaction ID from document ID (reference number)
+      const transactionId = formatTransactionId(reference);
 
       // Refresh user balance
       const userDocSnap = await getDoc(userRef);
@@ -317,47 +497,44 @@ export default function ManualTopUp() {
         });
       }
 
-      // Refresh transactions from Firestore
+      // Refresh total top-ups count
       const manualTopUpCollection = collection(db, "manual_topup");
-      let refreshQuerySnapshot;
-      try {
-        const refreshQ = query(manualTopUpCollection, orderBy("requestedAt", "desc"));
-        refreshQuerySnapshot = await getDocs(refreshQ);
-      } catch (error) {
-        console.warn("OrderBy failed, using simple query:", error);
-        refreshQuerySnapshot = await getDocs(manualTopUpCollection);
-      }
+      const refreshQuerySnapshot = await getDocs(manualTopUpCollection);
+      setTotalTopUps(refreshQuerySnapshot.size);
       
-      const refreshedTransactions = [];
-      refreshQuerySnapshot.forEach((doc) => {
-        const data = doc.data();
-        const requestedAt = data.requestedAt?.toDate ? data.requestedAt.toDate() : (data.requestedAt ? new Date(data.requestedAt) : new Date());
-        refreshedTransactions.push({
-          id: formatTransactionId(doc.id),
-          documentId: doc.id,
-          name: data.userName || "",
-          rfid: data.userId || "",
-          amount: data.amount || 0,
-          method: data.paymentMethod || "",
-          reference: data.referenceId || "",
-          datetime: requestedAt,
-          status: data.status || "approved",
+      // Refresh manual top-ups list if in topups view mode
+      if (viewMode === "topups") {
+        const refreshTopUpsData = [];
+        refreshQuerySnapshot.forEach((doc) => {
+          const data = doc.data();
+          const requestedAt = data.requestedAt?.toDate ? data.requestedAt.toDate() : (data.requestedAt ? new Date(data.requestedAt) : new Date());
+          
+          refreshTopUpsData.push({
+            id: doc.id,
+            documentId: doc.id,
+            name: data.userName || "",
+            rfid: data.userId || "",
+            amount: data.amount || 0,
+            paymentMethod: data.paymentMethod || "",
+            referenceId: data.referenceId || "",
+            transactionId: formatTransactionId(doc.id),
+            datetime: requestedAt,
+          });
         });
-      });
-      
-      // Sort by date if not already sorted
-      refreshedTransactions.sort((a, b) => {
-        const dateA = a.datetime instanceof Date ? a.datetime : new Date(a.datetime);
-        const dateB = b.datetime instanceof Date ? b.datetime : new Date(b.datetime);
-        return dateB - dateA;
-      });
-      
-      setTransactions(refreshedTransactions);
+        
+        refreshTopUpsData.sort((a, b) => {
+          const dateA = a.datetime instanceof Date ? a.datetime : new Date(a.datetime);
+          const dateB = b.datetime instanceof Date ? b.datetime : new Date(b.datetime);
+          return dateB - dateA;
+        });
+        
+        setManualTopUps(refreshTopUpsData);
+      }
 
       // Show success modal
       setShowSuccess(true);
 
-      // Reset form after success (keep user selected so they can add more)
+      // Reset form and close modal after success
       setTimeout(() => {
         setAmount("");
         setMethod("Cash");
@@ -367,6 +544,7 @@ export default function ManualTopUp() {
         setShowGlobalError(false);
         setShowSuccess(false);
         setProcessing(false);
+        closeFormModal(); // Close the modal after success
       }, 2000);
     } catch (error) {
       console.error("Error processing top-up:", error);
@@ -383,83 +561,516 @@ export default function ManualTopUp() {
 
   const labelClass = "text-xs sm:text-sm text-gray-500";
 
-  return (
+  // Empty State for No Search Results (when search query exists)
+  const EmptySearchState = () => (
+    <div className="flex flex-col gap-2 items-center justify-center p-5 rounded-2xl border border-dashed border-gray-300 bg-gray-100 lg:bg-gray-50 w-full">
+      <div className="flex items-center justify-center py-2">
+        <div className="flex items-center justify-center p-4 rounded-full bg-gray-300 text-gray-600">
+          <UserX className="size-7 sm:size-8" />
+        </div>
+      </div>
+      <div className="flex flex-col text-center pb-2">
+        <span className="text-base sm:text-lg font-semibold">
+          User Not Found
+        </span>
+        <span className="text-gray-500">There is no user found</span>
+      </div>
+    </div>
+  );
+
+  // Empty State for No Search Query Yet
+  const EmptySearchPromptState = () => (
+    <div className="flex flex-col gap-2 items-center justify-center p-5 rounded-2xl border border-dashed border-gray-300 bg-gray-100 lg:bg-gray-50 w-full">
+      <div className="flex items-center justify-center py-2">
+        <div className="flex items-center justify-center p-4 rounded-full bg-gray-300 text-gray-600">
+          <Users className="size-7 sm:size-8" />
+        </div>
+      </div>
+      <div className="flex flex-col text-center pb-2">
+        <span className="text-base sm:text-lg font-semibold">
+          Search for Users
+        </span>
+        <span className="text-gray-500">Start typing in the search field to find users</span>
+      </div>
+    </div>
+  );
+
+  // Skeleton Loading Component
+  const SkeletonLoader = () => (
     <div className="flex flex-col xl:flex-1 gap-4">
-      {/* search user*/}
-      {!selectedUser && (
+      {/* Total Manual Top-ups Skeleton */}
+      <div className="flex relative rounded-2xl overflow-hidden bg-gradient-to-r from-green-500 via-green-400 to-green-500 p-5 text-white animate-pulse">
+        <div className="flex flex-1 flex-col gap-2">
+          <div className="h-8 sm:h-10 w-16 bg-green-600/50 rounded"></div>
+          <div className="h-4 w-48 bg-green-600/50 rounded"></div>
+          <div className="h-3 w-32 bg-green-600/50 rounded"></div>
+        </div>
+        
+        {/* Icon Skeleton - Positioned at right edge, vertically centered */}
+        <div className="absolute top-1/2 -translate-y-1/2 right-[60px] sm:right-[80px] rounded-full p-3 bg-green-600/40">
+          <div className="w-6 h-6 sm:w-7 sm:h-7 bg-green-700/50 rounded-full"></div>
+        </div>
+        
+        {/* Tab Switcher Button Skeleton - Full Height at Rightmost Edge */}
+        <div className="absolute top-0 right-0 bottom-0 rounded-tr-2xl rounded-br-2xl px-4 sm:px-6 flex items-center justify-center bg-green-600/40">
+          <div className="w-5 h-5 sm:w-6 sm:h-6 bg-green-700/50 rounded"></div>
+        </div>
+      </div>
+
+      {/* Main Content Skeleton */}
+      <div className="flex flex-col gap-4">
+        {/* Search Bar Skeleton */}
+        <div className="flex flex-col gap-1 w-full">
+          <div className="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
+          <div className="h-12 w-full bg-gray-200 rounded-lg animate-pulse"></div>
+        </div>
+
+        {/* Search Results Cards Skeleton */}
         <div className="flex flex-col gap-2">
-          {/* label */}
-          <span className="font-semibold text-gray-500 text-xs sm:text-sm">
-            Search User
-          </span>
-
-          <div className="border border-dashed border-gray-300 rounded-2xl p-4 sm:p-5 flex flex-col items-center justify-center gap-4 sm:gap-5 bg-gray-50">
-            <div className="flex items-center justify-center pt-2">
-              <div className="flex items-center justify-center p-4 bg-gray-200 rounded-full">
-                <BanknoteArrowUp className="size-7 sm:size-8" />
-              </div>
-            </div>
-
-            <div className="flex flex-col text-center">
-              <span className="text-base sm:text-lg font-semibold">
-                Manual Top-up
-              </span>
-              <span className="text-gray-500 text-xs sm:text-sm">
-                Enter user's name or RFID No. to add balance.
-              </span>
-            </div>
-
-            <div className="flex items-center justify-center pb-2">
-              <button
-                onClick={handleSearchModal}
-                className="px-6 py-2 rounded-lg bg-green-500 text-white hover:bg-green-500/90 active:bg-green-600 cursor-pointer transition-colors duration-150"
+          <div className="h-4 w-40 bg-gray-200 rounded animate-pulse"></div>
+          
+          <div className="flex flex-col gap-3">
+            {[...Array(5)].map((_, i) => (
+              <div
+                key={i}
+                className="p-5 rounded-2xl border border-gray-300 flex items-center animate-pulse"
               >
-                Search user
-              </button>
-            </div>
+                <div className="flex flex-1 flex-col gap-3">
+                  <div className="flex flex-col gap-1">
+                    <div className="h-5 w-32 bg-gray-200 rounded"></div>
+                    <div className="h-4 w-40 bg-gray-200 rounded"></div>
+                  </div>
+                </div>
+                <div className="h-6 w-20 bg-gray-200 rounded-full"></div>
+              </div>
+            ))}
           </div>
         </div>
-      )}
+      </div>
+    </div>
+  );
 
-      {/* manual top-up form */}
+  return (
+    <div className="flex flex-col xl:flex-1 gap-4 relative">
+      {/* Skeleton Loader with fade transition */}
+      <div className={`absolute inset-0 z-10 transition-opacity duration-500 ${
+        searchLoading ? "opacity-100" : "opacity-0 pointer-events-none"
+      }`}>
+        <SkeletonLoader />
+      </div>
+      
+      {/* Content with fade transition */}
+      <div className={`transition-opacity duration-500 ${
+        searchLoading ? "opacity-0" : "opacity-100"
+      }`}>
+        {/* Total Manual Top-ups Card */}
+        <div className="flex relative rounded-2xl overflow-hidden bg-linear-to-r from-green-500 via-green-400 to-green-500 p-5 text-white">
+          <div className="flex flex-1 flex-col gap-2">
+            <span className="text-2xl sm:text-3xl font-bold">
+              {topUpsLoading ? "..." : totalTopUps}
+            </span>
+            <div className="flex flex-col">
+              <span className="text-sm sm:text-base font-semibold text-white">
+                Total Manual Top-ups
+              </span>
+              <span className="text-xs text-gray-100">
+                As of {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+              </span>
+            </div>
+          </div>
+          
+          {/* Icon - Positioned at right edge, vertically centered */}
+          <div className="absolute top-1/2 -translate-y-1/2 right-[60px] sm:right-[80px] rounded-full p-3 shadow-600/40 bg-green-600/40 shadow-green-600/40">
+            <BanknoteArrowUp className="size-6 sm:size-7" />
+          </div>
+          
+          {/* Tab Switcher Button - Full Height at Rightmost Edge */}
+          <button
+            onClick={() => {
+              if (viewMode === "search") {
+                setViewMode("topups");
+                setCurrentPage(1);
+              } else {
+                setViewMode("search");
+                setCurrentPage(1);
+              }
+            }}
+            className="absolute top-0 right-0 bottom-0 rounded-tr-2xl rounded-br-2xl px-4 sm:px-6 flex items-center justify-center transition-colors duration-150 bg-green-600/40 hover:bg-green-600/50 active:bg-green-600/60 cursor-pointer"
+          >
+            <ChevronRight className="size-5 sm:size-6 text-white" />
+          </button>
+        </div>
+
+        {/* MAIN CONTENT */}
+        <div className="flex flex-col gap-4">
+          {viewMode === "search" ? (
+            <>
+              {/* SEARCH BAR */}
+              <form className="flex">
+                <div className="flex flex-col gap-1 w-full">
+                  <label className="text-xs sm:text-sm font-semibold text-gray-500 mt-4">
+                    Search users
+                  </label>
+
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Supports comma-separated search."
+                      className="px-3 sm:px-4 py-3 w-full border border-gray-300 outline-none rounded-lg focus:border-green-500 placeholder:text-gray-500 transition-colors duration-150 pe-20 sm:pe-21"
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                      }}
+                    />
+
+                    {searchQuery.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleClear}
+                        className="absolute px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-100/90 active:bg-gray-200 cursor-pointer transition-colors duration-150 top-2 right-2 text-xs"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </form>
+
+              {/* SEARCH RESULTS */}
+              <div className="flex flex-col gap-2">
+                <span className="text-xs sm:text-sm font-semibold text-gray-500 mt-2">
+                  List of Users
+                </span>
+                
+                <div className="flex flex-col gap-3">
+                  {searchLoading ? (
+                    <div className="flex flex-col gap-4 items-center justify-center p-5 rounded-2xl border border-dashed border-gray-300 bg-gray-100 lg:bg-gray-50">
+                      <div className="flex items-center justify-center pt-2">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600"></div>
+                      </div>
+                      <div className="flex flex-col text-center pb-2">
+                        <span className="font-semibold">Loading...</span>
+                      </div>
+                    </div>
+                  ) : searchQuery.length === 0 ? (
+                    <EmptySearchPromptState />
+                  ) : filteredUsers.length === 0 ? (
+                    <EmptySearchState />
+                  ) : (
+                    filteredUsers.map((user) => (
+                      <button
+                        key={user.id}
+                        onClick={() => openFormModal(user)}
+                        className="p-5 cursor-pointer rounded-2xl border border-gray-300 flex items-center hover:bg-gray-50 active:bg-gray-100 transition-colors duration-150"
+                      >
+                        <div className="flex flex-1 text-left flex-col gap-3">
+                          <div className="flex flex-col">
+                            <span className="font-semibold">{user.name}</span>
+                            <span className="text-xs sm:text-sm text-gray-500">
+                              RFID No: {user.rfid}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center">
+                          <div className="flex items-center px-4 py-1 rounded-full text-xs text-white bg-green-500">
+                            <span>Select</span>
+                          </div>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* MANUAL TOP-UPS LIST */}
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-2">
+                  <span className="text-xs sm:text-sm font-semibold text-gray-500 mt-2">
+                    All Manual Top-ups
+                  </span>
+                  
+                  {/* Payment Method Filter Buttons */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={() => {
+                        setPaymentFilter("all");
+                        setCurrentPage(1); // Reset to first page when filter changes
+                      }}
+                      className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors duration-150 ${
+                        paymentFilter === "all"
+                          ? "bg-green-500 text-white border border-green-500"
+                          : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 active:bg-gray-100"
+                      }`}
+                    >
+                      All
+                    </button>
+                    {paymentMethod.map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          setPaymentFilter(item.method);
+                          setCurrentPage(1); // Reset to first page when filter changes
+                        }}
+                        className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors duration-150 ${
+                          paymentFilter === item.method
+                            ? "bg-green-500 text-white border border-green-500"
+                            : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 active:bg-gray-100"
+                        }`}
+                      >
+                        {item.method}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Filtered top-ups */}
+                {(() => {
+                  const filteredTopUps = paymentFilter === "all" 
+                    ? manualTopUps 
+                    : manualTopUps.filter(topup => topup.paymentMethod === paymentFilter);
+                  
+                  // Pagination calculations
+                  const totalPages = Math.max(1, Math.ceil(filteredTopUps.length / itemsPerPage));
+                  const indexStart = (currentPage - 1) * itemsPerPage;
+                  const paginatedTopUps = filteredTopUps.slice(indexStart, indexStart + itemsPerPage);
+
+                  // Handle page number click
+                  const handlePageClick = (pageNum) => {
+                    if (pageNum >= 1 && pageNum <= totalPages && pageNum <= 5) {
+                      setCurrentPage(pageNum);
+                    }
+                  };
+
+                  // Generate visible page numbers (limited to 5)
+                  const getVisiblePages = () => {
+                    const pages = [];
+                    const maxVisible = 5;
+                    const maxPageToShow = Math.min(totalPages, maxVisible);
+                    
+                    for (let i = 1; i <= maxPageToShow; i++) {
+                      pages.push(i);
+                    }
+                    
+                    return pages;
+                  };
+                  
+                  return filteredTopUps.length === 0 ? (
+                  <div className="flex flex-col gap-2 items-center justify-center p-5 rounded-2xl border border-dashed border-gray-300 bg-gray-100 lg:bg-gray-50 w-full">
+                    <div className="flex items-center justify-center py-2">
+                      <div className="flex items-center justify-center p-4 rounded-full bg-gray-300 text-gray-600">
+                        <BanknoteArrowUp className="size-7 sm:size-8" />
+                      </div>
+                    </div>
+                    <div className="flex flex-col text-center pb-2">
+                      <span className="text-base sm:text-lg font-semibold">
+                        {paymentFilter === "all" 
+                          ? "No Manual Top-ups"
+                          : `No manual top-ups with ${paymentFilter}`
+                        }
+                      </span>
+                      <span className="text-gray-500">
+                        {paymentFilter === "all"
+                          ? "There are no manual top-ups yet"
+                          : `There are no manual top-ups with ${paymentFilter} payment method`
+                        }
+                      </span>
+                    </div>
+                  </div>
+                  ) : (
+                    <>
+                      {/* MOBILE VIEW - Cards */}
+                      <div className="flex xl:hidden flex-col gap-3">
+                        {paginatedTopUps.map((topup) => (
+                        <div
+                          key={topup.id}
+                          className="p-5 rounded-2xl border border-gray-300 flex flex-col gap-3"
+                        >
+                          <div className="flex flex-col gap-1">
+                            <span className="text-xs sm:text-sm font-medium text-green-600">
+                              Reference: {topup.referenceId}
+                            </span>
+                            <span className="font-semibold">{topup.name}</span>
+                            <span className="text-xs sm:text-sm text-gray-500">
+                              RFID No: {topup.rfid}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex flex-col gap-1">
+                              <span className="text-xs text-gray-500">Amount</span>
+                              <span className="font-semibold text-green-600">
+                                ₱{topup.amount?.toLocaleString() || "0.00"}
+                              </span>
+                            </div>
+                            <div className="flex flex-col gap-1 items-end">
+                              <span className="text-xs text-gray-500">Date</span>
+                              <span className="text-xs sm:text-sm">
+                                {topup.datetime.toLocaleDateString('en-US')}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                            <div className="flex flex-col gap-1">
+                              <span className="text-xs text-gray-500">Payment Method</span>
+                              <span className="text-xs sm:text-sm font-medium">
+                                {topup.paymentMethod}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* DESKTOP VIEW - Table */}
+                    <div className="hidden xl:flex rounded-2xl overflow-hidden border border-gray-300 w-full">
+                      <table className="w-full text-sm text-left text-body">
+                        <thead className="border-b border-gray-300 bg-gray-100">
+                          <tr>
+                            <th className="px-6 py-3 font-medium">Reference</th>
+                            <th className="px-6 py-3 font-medium">Name</th>
+                            <th className="px-6 py-3 font-medium">RFID No.</th>
+                            <th className="px-6 py-3 font-medium">Amount</th>
+                            <th className="px-6 py-3 font-medium">Payment Method</th>
+                            <th className="px-6 py-3 font-medium">Date</th>
+                          </tr>
+                        </thead>
+
+                        <tbody>
+                          {paginatedTopUps.map((topup) => (
+                            <tr key={topup.id} className="border-b border-gray-300">
+                              <td className="px-6 py-4 font-medium">{topup.referenceId}</td>
+                              <td className="px-6 py-4">{topup.name}</td>
+                              <td className="px-6 py-4">{topup.rfid}</td>
+                              <td className="px-6 py-4 text-green-600 font-semibold">
+                                ₱{topup.amount?.toLocaleString() || "0.00"}
+                              </td>
+                              <td className="px-6 py-4">{topup.paymentMethod}</td>
+                              <td className="px-6 py-4">
+                                {topup.datetime.toLocaleDateString('en-US')}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* PAGINATION */}
+                    <div className="flex items-center justify-center lg:justify-end">
+                      <div className="inline-flex text-xs items-center gap-1">
+                        <button
+                          onClick={() => {
+                            if (currentPage > 1) {
+                              setCurrentPage(currentPage - 1);
+                            }
+                          }}
+                          className="rounded-tl-2xl rounded-bl-2xl border border-gray-300 p-2 hover:bg-gray-50 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed transition-colors duration-150"
+                          disabled={currentPage <= 1}
+                        >
+                          <ChevronLeft className="size-4" />
+                        </button>
+
+                        {/* Page Number Buttons */}
+                        <div className="flex items-center border-t border-b border-gray-300">
+                          {getVisiblePages().map((page) => (
+                            <button
+                              key={page}
+                              onClick={() => handlePageClick(page)}
+                              className={`px-3 py-2 border-x border-gray-300 hover:bg-gray-50 active:bg-gray-100 transition-colors duration-150 ${
+                                currentPage === page
+                                  ? "bg-green-500 text-white hover:bg-green-600 font-semibold"
+                                  : "text-gray-700"
+                              }`}
+                            >
+                              {page}
+                            </button>
+                          ))}
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            if (currentPage < totalPages && currentPage < 5) {
+                              setCurrentPage(currentPage + 1);
+                            }
+                          }}
+                          className="rounded-tr-2xl rounded-br-2xl border border-gray-300 p-2 hover:bg-gray-50 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed transition-colors duration-150"
+                          disabled={currentPage >= totalPages || currentPage >= 5}
+                        >
+                          <ChevronRight className="size-4" />
+                        </button>
+                      </div>
+                    </div>
+                    </>
+                  );
+                })()}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* =========================== */}
+      {/* MANUAL TOP-UP FORM MODAL */}
+      {/* =========================== */}
+
       {selectedUser && (
-        <div className="flex flex-col gap-2">
-          {/* label */}
-          <span className="font-semibold text-gray-500 text-xs sm:text-sm">
-            Manual Top-up Form
-          </span>
-          <div className="border border-gray-300 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row items-center md:items-start justify-center gap-5 sm:gap-6 ">
-            {/* user info */}
-            <div className="flex flex-col gap-4 w-full md:w-96 xl:w-1/2 p-4 md:p-5 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-              <div className="flex flex-col gap-3 py-2">
-                <div className="flex items-center justify-center">
-                  <div className="size-24 rounded-full bg-green-500"></div>
-                </div>
+        <div 
+          className={`fixed inset-0 bg-black/60 flex items-center justify-center p-4 sm:p-5 z-50 overflow-y-auto transition-opacity duration-300 ${
+            isClosing ? "opacity-0" : "opacity-100"
+          }`}
+          onClick={closeFormModal}
+        >
+          <div 
+            className={`rounded-2xl relative bg-white w-full max-w-5xl flex flex-col gap-3 mt-2 mb-2 transition-all duration-300 ease-in-out ${
+              isClosing 
+                ? "translate-y-[150vh] opacity-0 scale-95" 
+                : isOpening
+                ? "translate-y-0 opacity-100 scale-100"
+                : "translate-y-[20px] opacity-0 scale-[0.95]"
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* CLOSE BUTTON - Top Middle */}
+            <button
+              onClick={closeFormModal}
+              className="absolute top-[-16px] left-1/2 transform -translate-x-1/2 z-10 p-2 cursor-pointer rounded-full bg-white border-2 border-gray-300 hover:bg-gray-50 hover:border-gray-400 active:bg-gray-100 transition-all duration-150 text-gray-600 shadow-lg"
+            >
+              <ChevronDown className="size-5 sm:size-6" />
+            </button>
 
-                <div className="flex md:flex-col md:gap-4 items-center ">
-                  <div className="flex flex-1 flex-col text-start md:text-center">
-                    <span className="font-semibold">{selectedUser.name}</span>
-                    <span className="text-gray-500 text-xs sm:text-sm">
-                      RFID No. {selectedUser.rfid}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-1 flex-col text-end md:text-center">
-                    <span className="text-xs sm:text-sm text-gray-500">
-                      Current balance
-                    </span>
-                    <span className="font-semibold">
-                      P{selectedUser.balance}.00
-                    </span>
-                  </div>
+            {/* HEADER CARD - Matching Total Users Card Design */}
+            <div className="flex relative rounded-t-2xl p-4 sm:p-5 text-white bg-linear-to-r from-green-500 via-green-400 to-green-500">
+              <div className="flex flex-1 flex-col gap-1">
+                <span className="text-xl sm:text-2xl font-bold">
+                  {selectedUser.name}
+                </span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs sm:text-sm font-semibold text-white">
+                    RFID No. {selectedUser.rfid}
+                  </span>
+                  <span className="text-xs text-gray-100">
+                    Manual Top-up
+                  </span>
                 </div>
+              </div>
+              <div className="absolute top-3 right-3 rounded-full p-2.5 sm:p-3 bg-green-600/40 shadow-green-600/40">
+                <UserRound className="size-5 sm:size-6" />
               </div>
             </div>
 
-            {/* form */}
-            <div className="flex flex-col gap-4 w-full">
-              <div className="flex items-center justify-center">
-                <span className="font-semibold">Top-up Form</span>
+            {/* MAIN CONTENT */}
+            <div className="flex flex-col gap-3 p-4 sm:p-5">
+              {/* User Info Card - Compact Design */}
+              <div className="flex flex-col gap-3 p-4 rounded-lg border border-gray-300 bg-gray-50">
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs sm:text-sm text-gray-500">Current Balance</span>
+                    <span className="font-semibold text-base text-green-600">
+                      ₱{selectedUser.balance?.toLocaleString() || "0.00"}
+                    </span>
+                  </div>
+                </div>
               </div>
 
               {/* GLOBAL ERROR */}
@@ -516,14 +1127,39 @@ export default function ManualTopUp() {
                     type="text"
                     value={reference}
                     disabled={method === "Cash"}
-                    onChange={(e) => setReference(e.target.value)}
-                    placeholder="Enter reference number"
+                    onChange={handleReferenceChange}
+                    onKeyDown={handleReferenceKeyDown}
+                    onFocus={(e) => {
+                      // When focused, move cursor to end of prefix if it's within the prefix area
+                      if (method !== "Cash") {
+                        const prefix = getPaymentPrefix(method);
+                        if (prefix) {
+                          const prefixWithDash = prefix + "-";
+                          const cursorPosition = e.target.selectionStart;
+                          if (cursorPosition < prefixWithDash.length) {
+                            setTimeout(() => {
+                              e.target.setSelectionRange(prefixWithDash.length, prefixWithDash.length);
+                            }, 0);
+                          }
+                        }
+                      }
+                    }}
+                    placeholder={
+                      method === "Cash"
+                        ? "Auto-generated"
+                        : `Enter complete reference (e.g., ${getPaymentPrefix(method)}-1234567890)`
+                    }
                     className={
                       method === "Cash"
                         ? "px-3 sm:px-4 py-2 w-full border border-gray-300 bg-gray-100 outline-none rounded-lg placeholder:text-gray-500 transition-colors duration-150"
                         : fieldClass(errors.reference)
                     }
                   />
+                  {method !== "Cash" && getPaymentPrefix(method) && (
+                    <span className="text-xs text-gray-500">
+                      Format: {getPaymentPrefix(method)}-XXXXXXXXXX (prefix is fixed)
+                    </span>
+                  )}
                   {errors.reference && (
                     <span className="text-xs text-red-500">
                       {errors.reference}
@@ -544,15 +1180,11 @@ export default function ManualTopUp() {
                 </div>
 
                 {/* buttons */}
-                <div className="flex gap-2 items-center justify-center md:justify-end w-full mt-2">
+                <div className="flex gap-2 items-center justify-end w-full mt-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      setSelectedUser(null);
-                      setErrors({});
-                      setShowGlobalError(false);
-                    }}
-                    className="bg-red-500 w-full md:w-auto text-white rounded-lg px-4 py-2 hover:bg-red-500/90 active:bg-red-600 transition-colors duration-150 cursor-pointer"
+                    onClick={closeFormModal}
+                    className="bg-red-500 text-white rounded-lg px-4 py-2 hover:bg-red-500/90 active:bg-red-600 transition-colors duration-150 cursor-pointer"
                   >
                     Discard
                   </button>
@@ -560,318 +1192,12 @@ export default function ManualTopUp() {
                   <button 
                     type="submit"
                     disabled={processing}
-                    className="bg-green-500 w-full md:w-auto text-white rounded-lg px-4 py-2 hover:bg-green-500/90 active:bg-green-600 transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="bg-green-500 text-white rounded-lg px-4 py-2 hover:bg-green-500/90 active:bg-green-600 transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {processing ? "Processing..." : "Confirm"}
                   </button>
                 </div>
               </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* transactions */}
-      <div className="flex flex-col gap-2">
-        <div className="flex items-centerr">
-          {/* label */}
-          <span className="font-semibold text-gray-500 text-xs sm:text-sm">
-            All Manual Top-up
-          </span>
-          {/* see all link */}
-        </div>
-
-        {/* mobile */}
-        <div className="flex xl:hidden flex-col gap-2">
-          {transactionsLoading ? (
-            <div className="flex flex-col gap-4 sm:gap-5 p-4 sm:p-5 rounded-2xl border border-dashed border-gray-300 bg-gray-50">
-              <div className="flex items-center justify-center pt-2">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600"></div>
-              </div>
-              <div className="flex flex-col text-center pb-2">
-                <span className="text-base sm:text-lg font-semibold">
-                  Loading...
-                </span>
-              </div>
-            </div>
-          ) : transactions.length === 0 ? (
-            <div className="flex flex-col gap-4 sm:gap-5 p-4 sm:p-5 rounded-2xl border border-dashed border-gray-300 bg-gray-50">
-              <div className="flex items-center justify-center pt-2">
-                <div className="flex items-center justify-center p-4 bg-gray-200 rounded-full">
-                  <ArchiveX className="size-7 sm:size-8" />
-                </div>
-              </div>
-
-              <div className="flex flex-col text-center pb-2">
-                <span className="text-base sm:text-lg font-semibold">
-                  No Transactions
-                </span>
-                <span className="text-gray-500 text-xs sm:text-sm">
-                  There are no transactions made.
-                </span>
-              </div>
-            </div>
-          ) : (
-            transactions.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setSelectedTransaction(t)}
-                className="rounded-2xl border border-gray-300 p-5 sm:p-5 flex items-center hover:bg-gray-50 active:bg-gray-100 transition-colors duration-150 cursor-pointer"
-              >
-                <div className="flex flex-1 flex-col text-start">
-                  <span className="font-semibold">{t.name}</span>
-                  <span className="text-gray-500 text-xs sm:text-sm">
-                    RFID No. {t.rfid}
-                  </span>
-                </div>
-                <div className="flex items-center justify-center">
-                  <div className="flex items-center gap-1 text-green-500 font-semibold text-base sm:text-lg">
-                    <Plus className="size-5 sm:size-6" />P{t.amount}.00
-                  </div>
-                </div>
-              </button>
-            ))
-          )}
-        </div>
-
-        {/* desktop */}
-        <div className="hidden xl:flex rounded-2xl overflow-hidden  w-full">
-          {transactionsLoading ? (
-            <div className="flex flex-col gap-4 sm:gap-5 p-4 sm:p-5 rounded-2xl border border-dashed border-gray-300 bg-gray-50 w-full">
-              <div className="flex items-center justify-center pt-2">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600"></div>
-              </div>
-              <div className="flex flex-col text-center pb-2">
-                <span className="text-base sm:text-lg font-semibold">
-                  Loading...
-                </span>
-              </div>
-            </div>
-          ) : transactions.length === 0 ? (
-            <div className="flex flex-col gap-4 sm:gap-5 p-4 sm:p-5 rounded-2xl border border-dashed border-gray-300 bg-gray-50 w-full">
-              <div className="flex items-center justify-center pt-2">
-                <div className="flex items-center justify-center p-4 bg-gray-200 rounded-full">
-                  <ArchiveX className="size-7 sm:size-8" />
-                </div>
-              </div>
-
-              <div className="flex flex-col text-center pb-2">
-                <span className="text-base sm:text-lg font-semibold">
-                  No Transactions
-                </span>
-                <span className="text-gray-500 text-xs sm:text-sm">
-                  There are no transactions made.
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-2xl overflow-hidden border border-gray-300 w-full">
-              <table className="w-full text-sm text-left rtl:text-right text-body">
-                <thead className="border-b border-gray-300 bg-gray-100">
-                  <tr>
-                    <th className="px-6 py-3 font-medium">Name</th>
-                    <th className="px-6 py-3 font-medium">RFID No.</th>
-                    <th className="px-6 py-3 font-medium">Amount</th>
-                    <th className="px-6 py-3 font-medium">Date and Time</th>
-                    <th className="px-6 py-3 font-medium">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {transactions.map((t) => (
-                    <tr key={t.id} className="border-b border-gray-300">
-                      <td className="px-6 py-4">{t.name}</td>
-                      <td className="px-6 py-4">{t.rfid}</td>
-                      <td className="px-6 py-4">
-                        <span className="text-green-500">P{t.amount}.00</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        {t.datetime instanceof Date ? formatDateTime(t.datetime) : t.datetime?.toLocaleString() || ""}
-                      </td>
-                      <td className="px-6 py-4">
-                        <button
-                          onClick={() => setSelectedTransaction(t)}
-                          className="rounded-lg px-4 py-1 bg-green-500 text-white text-xs cursor-pointer transition-colors duration-150 hover:bg-green-500/90 active:bg-green-600"
-                        >
-                          Review
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* search user name or RFID */}
-      {searchModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 sm:p-5 z-50 overflow-y-auto">
-          <div className="rounded-2xl relative bg-white p-4 sm:p-5 w-full max-w-md flex flex-col gap-4 sm:gap-5 mt-2 mb-2">
-            {/* close */}
-            <button
-              onClick={handleSearchModal}
-              className="p-2 cursor-pointer rounded-full hover:bg-gray-50 active:bg-gray-100 transition-colors duration-150 text-gray-500 absolute top-2 sm:top-3 right-2 sm:right-3"
-            >
-              <X className="size-4 sm:size-5" />
-            </button>
-
-            {/* content */}
-            <div className="flex flex-col items-center justify-center gap-4 pt-2 ">
-              <div className="rounded-full p-3 bg-gray-200 shadow-gray-600">
-                <UserSearch className="size-6 sm:size-7" />
-              </div>
-              <div className="flex flex-col text-center">
-                <span className="text-base sm:text-lg font-semibold">
-                  Search User
-                </span>
-                <span className="text-gray-500 text-xs sm:text-sm">
-                  Enter user's name or RFID No.
-                </span>
-              </div>
-            </div>
-
-            <form action="" className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs sm:text-sm">Name or RFID No.</label>
-                <input
-                  type="text"
-                  className={fieldClass(false)}
-                  placeholder="Enter name or RFID No."
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-              </div>
-
-              {/* results */}
-              <div className="flex flex-col gap-1 pb-2">
-                <span className="text-xs sm:text-sm text-gray-500 font-semibold">
-                  List of Users
-                </span>
-
-                {searchLoading ? (
-                  <div className="flex flex-col gap-4 items-center justify-center p-4 border border-dashed border-gray-300 bg-gray-100 rounded-lg">
-                    <div className="flex items-center justify-center pt-2">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-600"></div>
-                    </div>
-                    <div className="flex flex-col text-center pb-2">
-                      <span className="font-semibold">Searching...</span>
-                    </div>
-                  </div>
-                ) : filteredUsers.length === 0 ? (
-                  <div className="flex flex-col gap-4 items-center justify-center p-4 border border-dashed border-gray-300 bg-gray-100 rounded-lg">
-                    <div className="flex items-center justify-center pt-2">
-                      <div className="flex items-center justify-center p-3 rounded-full bg-gray-300">
-                        <UserX className="size-5 sm:size-6" />
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col text-center pb-2">
-                      <span className="font-semibold">No User Found</span>
-                      <span className="text-xs sm:text-sm text-gray-500">
-                        {query.trim() ? "No user found matching your search." : "Enter a name or RFID to search."}
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    {filteredUsers.map((u) => (
-                      <button
-                        key={u.id}
-                        type="button"
-                        onClick={() => handleSelectUser(u)}
-                        className="px-6 py-4 rounded-lg border border-gray-300 hover:bg-gray-100 active:bg-gray-200 cursor-pointer transition-colors duration-150 flex flex-col text-start"
-                      >
-                        <span className="text-sm sm:text-base font-semibold">
-                          {u.name}
-                        </span>
-                        <span className="text-gray-500 text-xs sm:text-sm">
-                          RFID No. {u.rfid}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {selectedTransaction && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 sm:p-5 z-50 overflow-y-auto">
-          <div className="rounded-2xl relative bg-white p-4 sm:p-5 w-full max-w-md flex flex-col gap-4 sm:gap-5 mt-2 mb-2">
-            {/* Close */}
-            <button
-              onClick={() => setSelectedTransaction(null)}
-              className="p-2 cursor-pointer rounded-full hover:bg-gray-50 active:bg-gray-100 transition-colors duration-150 text-gray-500 absolute top-2 sm:top-3 right-2 sm:right-3"
-            >
-              <X className="size-4 sm:size-5" />
-            </button>
-
-            {/* Icon + Title */}
-            <div className="flex flex-col items-center justify-center gap-4 pt-2">
-              <div className="rounded-full p-3 bg-green-500 shadow-green-600 text-white">
-                <ReceiptText className="size-6 sm:size-7" />
-              </div>
-              <div className="flex flex-col text-center">
-                <span className="text-base sm:text-lg font-semibold text-green-500">
-                  Transaction Details
-                </span>
-                <span className="text-gray-500 text-xs sm:text-sm">
-                  {selectedTransaction.datetime instanceof Date ? formatDateTime(selectedTransaction.datetime) : selectedTransaction.datetime?.toLocaleString() || ""}
-                </span>
-              </div>
-            </div>
-
-            {/* Name, RFID, Transaction ID */}
-            <div className="flex items-center pt-2">
-              <div className="flex flex-1 flex-col text-start">
-                <span className="text-xs sm:text-sm font-semibold">
-                  {selectedTransaction.name}
-                </span>
-                <span className="text-xs sm:text-sm text-gray-500">
-                  RFID No. {selectedTransaction.rfid}
-                </span>
-              </div>
-
-              <div className="flex flex-1 flex-col text-end">
-                <span className="text-xs sm:text-sm text-gray-500">
-                  Transaction ID
-                </span>
-                <span className="font-semibold text-xs sm:text-sm">
-                  {selectedTransaction.documentId ? formatTransactionId(selectedTransaction.documentId) : selectedTransaction.id}
-                </span>
-              </div>
-            </div>
-
-            {/* Amount + Payment Info */}
-            <div className="flex flex-col gap-4 pb-2">
-              <div className="flex flex-col gap-1 items-center justify-center py-4">
-                <div className="text-xl sm:text-2xl font-semibold flex items-center gap-2 text-green-500">
-                  <Plus className="size-4 sm:size-5" />P
-                  {selectedTransaction.amount}.00
-                </div>
-                <span className="text-gray-500 text-xs sm:text-sm">
-                  Amount Top-up
-                </span>
-              </div>
-
-              <div className="flex items-center p-4 rounded-lg bg-gray-100">
-                <div className="flex flex-1 flex-col text-xs sm:text-sm text-start">
-                  <span className="text-gray-500">Payment method</span>
-                  <span className="font-semibold">
-                    {selectedTransaction.method}
-                  </span>
-                </div>
-
-                <div className="flex flex-1 flex-col text-xs sm:text-sm text-end">
-                  <span className="text-gray-500">Reference number</span>
-                  <span className="font-semibold">
-                    {selectedTransaction.reference}
-                  </span>
-                </div>
-              </div>
             </div>
           </div>
         </div>

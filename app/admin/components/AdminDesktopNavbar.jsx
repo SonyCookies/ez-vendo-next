@@ -18,7 +18,7 @@ const PATHTITLES = {
   "/admin/users": "List of Users",
   "/admin/profile": "Admin Profile",
   "/admin/billing": "Billing Configuration",
-  "/admin/transactions": "Transaction Logs"
+  "/admin/transactions": "Package Transaction"
 };
 
 export default function AdminDesktopNavbar() {
