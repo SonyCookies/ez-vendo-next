@@ -309,38 +309,38 @@ export default function AdminDashboard() {
           console.error("Error fetching top-up requests status:", error);
         }
 
-        // 4. Transaction Types (Pie Chart)
-        try {
-          const transactionsRef = collection(db, "transactions");
-          const transactionsSnapshot = await getDocs(transactionsRef);
-          
-          let topUp = 0;
-          let deducted = 0;
-          let refund = 0;
-          
-          transactionsSnapshot.forEach((doc) => {
-            const type = (doc.data().type || "").trim();
-            if (type === "Top-up") topUp++;
-            else if (type === "Deducted") deducted++;
-            else if (type === "Refund" || type === "Refunded Minutes") refund++;
-          });
-          
-          setTransactionTypesData({
-            labels: ["Top-up", "Deducted", "Refund"],
-            datasets: [{
-              data: [topUp, deducted, refund],
-              borderWidth: 1,
-              backgroundColor: [
-                "#3B82F6", // Blue for top-up
-                "#EF4444", // Red for deducted
-                "#10B981", // Green for refund
-              ],
-              borderColor: "#ffffff",
-            }],
-          });
-        } catch (error) {
-          console.error("Error fetching transaction types:", error);
-        }
+        // 4. Transaction Types (Pie Chart) - REMOVED
+        // try {
+        //   const transactionsRef = collection(db, "transactions");
+        //   const transactionsSnapshot = await getDocs(transactionsRef);
+        //   
+        //   let topUp = 0;
+        //   let deducted = 0;
+        //   let refund = 0;
+        //   
+        //   transactionsSnapshot.forEach((doc) => {
+        //     const type = (doc.data().type || "").trim();
+        //     if (type === "Top-up") topUp++;
+        //     else if (type === "Deducted") deducted++;
+        //     else if (type === "Refund" || type === "Refunded Minutes") refund++;
+        //   });
+        //   
+        //   setTransactionTypesData({
+        //     labels: ["Top-up", "Deducted", "Refund"],
+        //     datasets: [{
+        //       data: [topUp, deducted, refund],
+        //       borderWidth: 1,
+        //       backgroundColor: [
+        //         "#3B82F6", // Blue for top-up
+        //         "#EF4444", // Red for deducted
+        //         "#10B981", // Green for refund
+        //       ],
+        //       borderColor: "#ffffff",
+        //     }],
+        //   });
+        // } catch (error) {
+        //   console.error("Error fetching transaction types:", error);
+        // }
 
         // 6. Revenue by Payment Method (Bar Chart)
         try {
@@ -1534,8 +1534,8 @@ export default function AdminDashboard() {
                         )}
                       </div>
 
-                      {/* Transaction Types */}
-                      <div className="flex flex-col gap-2 p-3 sm:p-4 xl:p-5 rounded-2xl border border-gray-300 bg-white shadow-sm">
+                      {/* Transaction Types - REMOVED */}
+                      {/* <div className="flex flex-col gap-2 p-3 sm:p-4 xl:p-5 rounded-2xl border border-gray-300 bg-white shadow-sm">
                         <span className="text-sm sm:text-base font-semibold text-gray-700">Transaction Types</span>
                         {transactionTypesData ? (
                           <div className="w-full h-56 sm:h-64 xl:h-72">
@@ -1559,7 +1559,7 @@ export default function AdminDashboard() {
                             <span className="text-xs sm:text-sm">No data available</span>
                           </div>
                         )}
-                      </div>
+                      </div> */}
                     </div>
 
                     {/* Session Activity Chart */}

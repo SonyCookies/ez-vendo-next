@@ -63,12 +63,13 @@ export default function AdminTransactionLogs() {
                 Package 4
               </button>
 
-              <button
+              {/* Refund Tab - COMMENTED OUT */}
+              {/* <button
                 onClick={() => setActivePackage("refund")}
                 className={`${getButtonClass("refund")} flex-shrink-0 xl:w-full`}
               >
                 Refund
-              </button>
+              </button> */}
             </div>
           </div>
 
