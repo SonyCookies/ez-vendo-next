@@ -10,6 +10,9 @@ import {
   ChevronDown,
   CheckCircle2,
   XCircle,
+  Radio,
+  CircleCheckBig,
+  CircleAlert,
 } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
 import { db } from "../../../../firebase";
@@ -61,6 +64,16 @@ export default function TopUpRequests() {
   
   // Status filter for history
   const [historyStatusFilter, setHistoryStatusFilter] = useState("all"); // "all", "approved", "rejected"
+  
+  // NFC Reading states
+  const [nfcModal, setNfcModal] = useState(false);
+  const [isNfcClosing, setIsNfcClosing] = useState(false);
+  const [isNfcOpening, setIsNfcOpening] = useState(false);
+  const [isReadingNfc, setIsReadingNfc] = useState(false);
+  const [nfcResult, setNfcResult] = useState(null); // "success" or "error"
+  const [nfcMessage, setNfcMessage] = useState("");
+  const [showNfcResult, setShowNfcResult] = useState(false);
+  const [nfcActiveTab, setNfcActiveTab] = useState("pending"); // Track which tab's search to populate
 
   // Fetch topup requests from Firestore (pending)
   useEffect(() => {
@@ -670,11 +683,161 @@ export default function TopUpRequests() {
     return pages;
   };
 
-  const anyModalOpen = selectedRequest !== null || showRejectModal || showImagePreview;
+  const anyModalOpen = selectedRequest !== null || showRejectModal || showImagePreview || nfcModal;
   useEffect(() => {
     document.body.style.overflow = anyModalOpen ? "hidden" : "auto";
     return () => (document.body.style.overflow = "auto");
   }, [anyModalOpen]);
+
+  // NFC Modal Functions
+  const openNfcModal = (tab = "pending") => {
+    setNfcModal(true);
+    setIsNfcClosing(false);
+    setIsNfcOpening(false);
+    setIsReadingNfc(false);
+    setNfcResult(null);
+    setNfcMessage("");
+    setShowNfcResult(false);
+    setNfcActiveTab(tab);
+    
+    // Trigger opening animation
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setIsNfcOpening(true);
+      });
+    });
+  };
+
+  const closeNfcModal = () => {
+    if (isNfcClosing) return;
+    setIsNfcOpening(false);
+    setIsNfcClosing(true);
+    setIsReadingNfc(false);
+    setTimeout(() => {
+      setNfcModal(false);
+      setIsNfcClosing(false);
+      setNfcResult(null);
+      setNfcMessage("");
+      setShowNfcResult(false);
+    }, 300);
+  };
+
+  // Check NFC Support
+  const checkNfcSupport = () => {
+    // First check if we're on HTTPS or localhost (required for Web NFC)
+    const isSecure = window.location.protocol === "https:" || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+    if (!isSecure) {
+      return {
+        supported: false,
+        message: "NFC requires a secure connection (HTTPS). You're currently accessing via HTTP. Please access this page via HTTPS (https://...) or use localhost for development."
+      };
+    }
+
+    // Check if NDEFReader is available
+    if (!("NDEFReader" in window)) {
+      const userAgent = navigator.userAgent.toLowerCase();
+      const isChrome = userAgent.includes("chrome") && !userAgent.includes("edg");
+      const isEdge = userAgent.includes("edg");
+      const isAndroid = userAgent.includes("android");
+      
+      let browserInfo = "";
+      if (isChrome && isAndroid) {
+        browserInfo = "Your browser may need to be updated. Please ensure you're using Chrome 89+ on Android.";
+      } else if (isEdge && isAndroid) {
+        browserInfo = "Your browser may need to be updated. Please ensure you're using Edge 89+ on Android.";
+      } else if (isAndroid) {
+        browserInfo = "Please use Chrome 89+ or Edge 89+ on Android for NFC support.";
+      } else {
+        browserInfo = "NFC is only available on Android devices using Chrome 89+ or Edge 89+.";
+      }
+      
+      return {
+        supported: false,
+        message: `NFC is not supported in this browser. ${browserInfo}`
+      };
+    }
+
+    // Check if we're on a mobile device (NFC is typically only available on mobile)
+    const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (!isMobile) {
+      return {
+        supported: false,
+        message: "NFC reading is only available on mobile devices. Please use Chrome on Android or Edge on Android."
+      };
+    }
+
+    return { supported: true };
+  };
+
+  // Start NFC Reading
+  const startNfcReading = async () => {
+    // Check support first
+    const supportCheck = checkNfcSupport();
+    if (!supportCheck.supported) {
+      setNfcResult("error");
+      setNfcMessage(supportCheck.message);
+      setShowNfcResult(true);
+      setIsReadingNfc(false);
+      return;
+    }
+
+    try {
+      setIsReadingNfc(true);
+      const ndef = new NDEFReader();
+      
+      await ndef.scan();
+      
+      ndef.addEventListener("reading", ({ message, serialNumber }) => {
+        // Clean the serial number (remove colons and convert to uppercase)
+        const cleanedRfid = serialNumber.replace(/:/g, "").toUpperCase();
+        
+        // Set the search query with the cleaned RFID based on active tab
+        if (nfcActiveTab === "pending") {
+          setSearchQuery(cleanedRfid);
+          setDebouncedQuery(cleanedRfid);
+        } else {
+          setHistorySearchQuery(cleanedRfid);
+          setDebouncedHistoryQuery(cleanedRfid);
+        }
+        
+        // Show success
+        setNfcResult("success");
+        setNfcMessage(`RFID read successfully: ${cleanedRfid}`);
+        setShowNfcResult(true);
+        setIsReadingNfc(false);
+        
+        // Close NFC modal after a short delay
+        setTimeout(() => {
+          closeNfcModal();
+        }, 1500);
+      });
+
+      ndef.addEventListener("readingerror", (error) => {
+        console.error("NFC reading error:", error);
+        setNfcResult("error");
+        setNfcMessage("Failed to read NFC tag. Please ensure the tag is close to your device and try again.");
+        setShowNfcResult(true);
+        setIsReadingNfc(false);
+      });
+
+    } catch (error) {
+      console.error("NFC reading error:", error);
+      let errorMessage = "Failed to start NFC reading.";
+      
+      if (error.name === "NotAllowedError" || error.name === "NotSupportedError") {
+        errorMessage = "NFC permission denied or not supported. Please check your device settings and ensure NFC is enabled.";
+      } else if (error.name === "SecurityError") {
+        errorMessage = "NFC requires a secure connection (HTTPS). Please access this page via HTTPS.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      setNfcResult("error");
+      setNfcMessage(errorMessage);
+      setShowNfcResult(true);
+      setIsReadingNfc(false);
+    }
+  };
 
   const handleViewRequest = (requestItem) => {
     setIsClosing(false);
@@ -1052,9 +1215,19 @@ export default function TopUpRequests() {
           {/* Search Bar */}
           <form className="flex">
             <div className="flex flex-col gap-1 w-full">
-              <label className="text-xs sm:text-sm font-semibold text-gray-500 mt-2">
-                Search users
-              </label>
+              <div className="flex items-center justify-between mt-2">
+                <label className="text-xs sm:text-sm font-semibold text-gray-500">
+                  Search users
+                </label>
+                <button
+                  type="button"
+                  onClick={() => openNfcModal("pending")}
+                  className="flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-lg bg-green-500 hover:bg-green-600 active:bg-green-700 text-white text-xs sm:text-sm font-medium transition-all duration-150 shadow-md hover:shadow-lg"
+                >
+                  <Radio className="size-4 sm:size-5" />
+                  <span>Scan NFC</span>
+                </button>
+              </div>
               <div className="relative">
                 <input
                   type="text"
@@ -1295,9 +1468,19 @@ export default function TopUpRequests() {
           {/* Search Bar */}
           <form className="flex">
             <div className="flex flex-col gap-1 w-full">
-              <label className="text-xs sm:text-sm font-semibold text-gray-500 mt-2">
-                Search history
-              </label>
+              <div className="flex items-center justify-between mt-2">
+                <label className="text-xs sm:text-sm font-semibold text-gray-500">
+                  Search history
+                </label>
+                <button
+                  type="button"
+                  onClick={() => openNfcModal("history")}
+                  className="flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-lg bg-green-500 hover:bg-green-600 active:bg-green-700 text-white text-xs sm:text-sm font-medium transition-all duration-150 shadow-md hover:shadow-lg"
+                >
+                  <Radio className="size-4 sm:size-5" />
+                  <span>Scan NFC</span>
+                </button>
+              </div>
               <div className="relative">
                 <input
                   type="text"
@@ -1882,6 +2065,139 @@ export default function TopUpRequests() {
             >
               OK
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------------------------------------- */}
+      {/* NFC MODAL */}
+      {/* -------------------------------------------------- */}
+      {nfcModal && (
+        <div 
+          className={`fixed inset-0 bg-black/60 flex items-center justify-center p-4 sm:p-5 z-50 overflow-y-auto transition-opacity duration-300 ${
+            isNfcClosing ? "opacity-0" : "opacity-100"
+          }`}
+          onClick={closeNfcModal}
+        >
+          <div 
+            className={`rounded-2xl relative bg-white w-full max-w-5xl flex flex-col gap-3 mt-2 mb-2 transition-all duration-300 ease-in-out ${
+              isNfcClosing 
+                ? "translate-y-[150vh] opacity-0 scale-95" 
+                : isNfcOpening
+                ? "translate-y-0 opacity-100 scale-100"
+                : "translate-y-[20px] opacity-0 scale-[0.95]"
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* CLOSE BUTTON - Top Middle */}
+            <button
+              onClick={closeNfcModal}
+              className="absolute top-[-16px] left-1/2 transform -translate-x-1/2 z-10 p-2 cursor-pointer rounded-full bg-white border-2 border-gray-300 hover:bg-gray-50 hover:border-gray-400 active:bg-gray-100 transition-all duration-150 text-gray-600 shadow-lg"
+            >
+              <ChevronDown className="size-5 sm:size-6" />
+            </button>
+
+            {/* HEADER CARD */}
+            <div className="flex relative rounded-t-2xl p-4 sm:p-5 text-white bg-gradient-to-r from-green-500 via-green-400 to-green-500">
+              <div className="flex flex-1 flex-col gap-1">
+                <span className="text-xl sm:text-2xl font-bold">
+                  NFC Scanner
+                </span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs sm:text-sm font-semibold text-white">
+                    Scan RFID Tag
+                  </span>
+                  <span className="text-xs text-gray-100">
+                    Bring your NFC tag close to your device
+                  </span>
+                </div>
+              </div>
+              <div className="absolute top-3 right-3 rounded-full p-2.5 sm:p-3 bg-green-600/40 shadow-green-600/40">
+                <Radio className="size-5 sm:size-6" />
+              </div>
+            </div>
+
+            {/* MAIN CONTENT */}
+            <div className="flex flex-col gap-4 p-4 sm:p-5 items-center justify-center min-h-[300px]">
+              {showNfcResult ? (
+                /* Result Display */
+                <div className="flex flex-col items-center justify-center gap-4 py-8">
+                  {nfcResult === "success" ? (
+                    <>
+                      <div className="rounded-full p-4 bg-green-100">
+                        <CircleCheckBig className="size-8 sm:size-10 text-green-600" />
+                      </div>
+                      <div className="flex flex-col text-center gap-2">
+                        <span className="text-lg sm:text-xl font-semibold text-green-600">
+                          RFID Read Successfully
+                        </span>
+                        <span className="text-sm sm:text-base text-gray-600">
+                          {nfcMessage}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="rounded-full p-4 bg-red-100">
+                        <CircleAlert className="size-8 sm:size-10 text-red-600" />
+                      </div>
+                      <div className="flex flex-col text-center gap-2">
+                        <span className="text-lg sm:text-xl font-semibold text-red-600">
+                          NFC Read Failed
+                        </span>
+                        <span className="text-sm sm:text-base text-gray-600">
+                          {nfcMessage}
+                        </span>
+                      </div>
+                      <button
+                        onClick={startNfcReading}
+                        className="mt-4 px-6 py-2.5 rounded-lg bg-green-500 hover:bg-green-600 active:bg-green-700 text-white font-medium text-sm sm:text-base transition-all duration-150 shadow-md hover:shadow-lg"
+                      >
+                        Try Again
+                      </button>
+                    </>
+                  )}
+                </div>
+              ) : (
+                /* Reading State */
+                <div className="flex flex-col items-center justify-center gap-4 py-8">
+                  <div className="relative">
+                    <div className="rounded-full p-6 bg-green-100 animate-pulse">
+                      <Radio className="size-12 sm:size-14 text-green-600" />
+                    </div>
+                    {isReadingNfc && (
+                      <div className="absolute inset-0 rounded-full border-4 border-green-500 animate-ping opacity-75"></div>
+                    )}
+                  </div>
+                  <div className="flex flex-col text-center gap-2">
+                    <span className="text-lg sm:text-xl font-semibold text-gray-800">
+                      {isReadingNfc ? "Reading NFC Tag..." : "Ready to Scan"}
+                    </span>
+                    <span className="text-sm sm:text-base text-gray-600">
+                      {isReadingNfc 
+                        ? "Bring your NFC tag close to your device" 
+                        : "Click the button below to start scanning"}
+                    </span>
+                  </div>
+                  {!isReadingNfc && (
+                    <button
+                      onClick={startNfcReading}
+                      className="mt-4 px-6 py-2.5 rounded-lg bg-green-500 hover:bg-green-600 active:bg-green-700 text-white font-medium text-sm sm:text-base transition-all duration-150 shadow-md hover:shadow-lg"
+                    >
+                      Start Scanning
+                    </button>
+                  )}
+                  {isReadingNfc && (
+                    <button
+                      onClick={closeNfcModal}
+                      className="mt-4 px-6 py-2.5 rounded-lg bg-red-500 hover:bg-red-600 active:bg-red-700 text-white font-medium text-sm sm:text-base transition-all duration-150 shadow-md hover:shadow-lg"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
