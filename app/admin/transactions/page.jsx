@@ -19,9 +19,9 @@ export default function AdminTransactionLogs() {
   };
 
   return (
-    <div className="min-h-dvh flex flex-col lg:flex-row text-sm sm:text-base relative">
+    <div className="h-dvh flex flex-col lg:flex-row text-sm sm:text-base relative overflow-hidden">
       <AdminNavbar />
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col overflow-y-auto">
         <AdminDesktopNavbar />
 
         <div className="flex flex-col xl:flex-row px-3 py-4 sm:p-4 md:p-5 gap-4 xl:gap-5">

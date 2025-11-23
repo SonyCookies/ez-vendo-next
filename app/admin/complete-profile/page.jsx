@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { doc, setDoc } from "firebase/firestore";
 import { auth, db, onAuthStateChanged } from "../../../firebase";
+import { User, Calendar, Users, Phone, MapPin, CircleAlert, Save, X } from "lucide-react";
 
 export default function CompleteProfile() {
   const router = useRouter();
@@ -16,21 +17,16 @@ export default function CompleteProfile() {
   const [loading, setLoading] = useState(false);
   const [adminId, setAdminId] = useState(null);
 
-  const fieldClass = "px-3 sm:px-4 py-3 border border-gray-300 outline-none rounded-lg focus:border-green-500 placeholder:text-gray-500 transition-colors duration-150";
-
   useEffect(() => {
+    // Get the current user (layout handles authentication check)
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        // User is signed in, set adminId
         setAdminId(user.uid);
-      } else {
-        // User is signed out, redirect to login
-        router.replace("/admin/login");
       }
     });
 
-    return () => unsubscribe(); // Cleanup listener on unmount
-  }, [router]);
+    return () => unsubscribe();
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -58,7 +54,7 @@ export default function CompleteProfile() {
           phone,
           address,
         },
-        { merge: true } // Use merge to update or create the document
+        { merge: true }
       );
       router.replace("/admin/dashboard");
     } catch (err) {
@@ -69,91 +65,166 @@ export default function CompleteProfile() {
   }
 
   return (
-    <div className="min-h-dvh p-3 sm:p-4 flex items-center justify-center text-sm sm:text-base">
-      <div className="container mx-auto w-full max-w-sm">
-        <div className="flex flex-col gap-6 ">
-          <div className="flex flex-col items-center justify-center ">
-            <span className="text-xl sm:text-2xl font-bold">
-              Complete Your <span className="text-green-500">Profile</span>
-            </span>
-            <span className="text-gray-500 text-sm sm:text-base">
-              Fill in the details below or skip to finish later.
-            </span>
+    <div className="min-h-dvh p-3 sm:p-4 md:p-5 flex items-center justify-center text-sm sm:text-base bg-gray-50">
+      <div className="container mx-auto w-full max-w-md">
+        <div className="flex flex-col gap-4 sm:gap-5">
+          {/* Header Card */}
+          <div className="flex relative rounded-2xl overflow-hidden bg-gradient-to-r from-green-500 via-green-400 to-green-500 p-4 sm:p-5 text-white shadow-lg">
+            <div className="flex flex-1 flex-col gap-1.5 sm:gap-2">
+              <span className="text-xl sm:text-2xl xl:text-3xl font-bold">
+                Complete Your Profile
+              </span>
+              <div className="flex flex-col">
+                <span className="text-xs sm:text-sm xl:text-base font-semibold text-white/90">
+                  Fill in your details or skip to finish later
+                </span>
+              </div>
+            </div>
+            <div className="absolute top-1/2 right-3 sm:right-4 -translate-y-1/2 rounded-full p-2.5 sm:p-3 bg-green-600/40 shadow-lg">
+              <User className="size-5 sm:size-6 xl:size-7" />
+            </div>
           </div>
 
-          {error && (
-            <div className="items-center gap-2 p-3 bg-red-100 rounded-lg border-l-4 border-red-500 text-red-600 flex text-xs sm:text-sm">
-              {error}
-            </div>
-          )}
+          {/* Profile Form Card */}
+          <div className="flex flex-col gap-3 sm:gap-4 p-4 sm:p-5 rounded-2xl border border-gray-300 bg-white shadow-sm">
+            {/* Error Message */}
+            {error && (
+              <div className="flex items-center gap-2 p-3 bg-red-50 rounded-lg border border-red-200 text-red-700 text-xs sm:text-sm">
+                <CircleAlert className="size-4 sm:size-5 flex-shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-            <div className="flex flex-col gap-1">
-              <label className="text-sm sm:text-base">Full Name</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className={fieldClass}
-                placeholder="Enter your full name"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm sm:text-base">Birthday</label>
-              <input
-                type="date"
-                value={birthday}
-                onChange={(e) => setBirthday(e.target.value)}
-                className={fieldClass}
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm sm:text-base">Gender</label>
-              <input
-                type="text"
-                value={gender}
-                onChange={(e) => setGender(e.target.value)}
-                className={fieldClass}
-                placeholder="Enter your gender"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm sm:text-base">Phone</label>
-              <input
-                type="text"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className={fieldClass}
-                placeholder="Enter your phone number"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-sm sm:text-base">Address</label>
-              <input
-                type="text"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                className={fieldClass}
-                placeholder="Enter your address"
-              />
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full rounded-full px-4 py-2 flex items-center gap-2 justify-center bg-green-500 hover:bg-green-500/90 active:bg-green-600 text-white mt-2 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {loading ? "Saving..." : "Save Profile"}
-              </button>
-              <button
-                type="button"
-                onClick={() => router.replace("/admin/dashboard")}
-                className="w-full rounded-full px-4 py-2 flex items-center gap-2 justify-center bg-gray-500 hover:bg-gray-500/90 active:bg-gray-600 text-white mt-2"
-              >
-                Skip
-              </button>
-            </div>
-          </form>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:gap-4">
+              {/* Full Name Field */}
+              <div className="flex flex-col gap-1">
+                <label className="text-gray-500 text-xs sm:text-sm font-medium">
+                  Full Name
+                </label>
+                <div className="relative">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <User className="size-4 sm:size-5" />
+                  </div>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full pl-10 pr-3 sm:px-4 sm:pl-12 py-2 sm:py-2.5 border border-gray-300 outline-none rounded-lg focus:border-green-500 placeholder:text-gray-500 transition-colors duration-150 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                    placeholder="Enter your full name"
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+
+              {/* Birthday Field */}
+              <div className="flex flex-col gap-1">
+                <label className="text-gray-500 text-xs sm:text-sm font-medium">
+                  Birthday
+                </label>
+                <div className="relative">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <Calendar className="size-4 sm:size-5" />
+                  </div>
+                  <input
+                    type="date"
+                    value={birthday}
+                    onChange={(e) => setBirthday(e.target.value)}
+                    className="w-full pl-10 pr-3 sm:px-4 sm:pl-12 py-2 sm:py-2.5 border border-gray-300 outline-none rounded-lg focus:border-green-500 placeholder:text-gray-500 transition-colors duration-150 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+
+              {/* Gender Field */}
+              <div className="flex flex-col gap-1">
+                <label className="text-gray-500 text-xs sm:text-sm font-medium">
+                  Gender
+                </label>
+                <div className="relative">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <Users className="size-4 sm:size-5" />
+                  </div>
+                  <input
+                    type="text"
+                    value={gender}
+                    onChange={(e) => setGender(e.target.value)}
+                    className="w-full pl-10 pr-3 sm:px-4 sm:pl-12 py-2 sm:py-2.5 border border-gray-300 outline-none rounded-lg focus:border-green-500 placeholder:text-gray-500 transition-colors duration-150 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                    placeholder="Enter your gender"
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+
+              {/* Phone Field */}
+              <div className="flex flex-col gap-1">
+                <label className="text-gray-500 text-xs sm:text-sm font-medium">
+                  Phone
+                </label>
+                <div className="relative">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <Phone className="size-4 sm:size-5" />
+                  </div>
+                  <input
+                    type="text"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full pl-10 pr-3 sm:px-4 sm:pl-12 py-2 sm:py-2.5 border border-gray-300 outline-none rounded-lg focus:border-green-500 placeholder:text-gray-500 transition-colors duration-150 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                    placeholder="Enter your phone number"
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+
+              {/* Address Field */}
+              <div className="flex flex-col gap-1">
+                <label className="text-gray-500 text-xs sm:text-sm font-medium">
+                  Address
+                </label>
+                <div className="relative">
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <MapPin className="size-4 sm:size-5" />
+                  </div>
+                  <input
+                    type="text"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    className="w-full pl-10 pr-3 sm:px-4 sm:pl-12 py-2 sm:py-2.5 border border-gray-300 outline-none rounded-lg focus:border-green-500 placeholder:text-gray-500 transition-colors duration-150 disabled:bg-gray-50 disabled:cursor-not-allowed"
+                    placeholder="Enter your address"
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-1">
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 rounded-lg px-4 py-2.5 sm:py-3 flex items-center gap-2 justify-center bg-green-500 hover:bg-green-600 active:bg-green-700 text-white font-medium text-sm sm:text-base shadow-md hover:shadow-lg transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-green-500"
+                >
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="size-4 sm:size-5" />
+                      <span>Save Profile</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => router.replace("/admin/dashboard")}
+                  className="flex-1 rounded-lg px-4 py-2.5 sm:py-3 flex items-center gap-2 justify-center bg-gray-500 hover:bg-gray-600 active:bg-gray-700 text-white font-medium text-sm sm:text-base shadow-md hover:shadow-lg transition-all duration-150"
+                >
+                  <X className="size-4 sm:size-5" />
+                  <span>Skip</span>
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
     </div>

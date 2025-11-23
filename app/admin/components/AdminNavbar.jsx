@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { auth, signOut } from "../../../firebase";
 
 import {
   Archive,
@@ -21,8 +23,10 @@ import Link from "next/link";
 
 export default function AdminNavbar() {
   const pathname = usePathname();
+  const router = useRouter();
 
   const [toggleSidebar, setToggleSidebar] = useState(false);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   
   // Initialize collapsed state from localStorage with lazy initialization
   const [isCollapsed, setIsCollapsed] = useState(() => {
@@ -72,7 +76,7 @@ export default function AdminNavbar() {
     },
     {
       id: 4,
-      name: "Transaction Logs",
+      name: "Package Transactions",
       icon: Archive,
       href: "/admin/transactions",
     },
@@ -86,9 +90,9 @@ export default function AdminNavbar() {
     },
     {
       id: 2,
-      name: "Billing Configuration",
+      name: "Configuration",
       icon: Settings,
-      href: "/admin/billing",
+      href: "/admin/configuration",
     },
   ];
 
@@ -100,12 +104,23 @@ export default function AdminNavbar() {
     setToggleSidebar(false);
   };
 
+  const handleSignOut = async () => {
+    try {
+      setIsSigningOut(true);
+      await signOut(auth);
+      router.replace("/admin/login");
+    } catch (error) {
+      console.error("Error signing out:", error);
+      setIsSigningOut(false);
+    }
+  };
+
 
   return (
     <>
       {/* navbar */}
       <div
-        className={`bg-gray-900 px-3 py-4 sm:p-4 md:p-5 flex lg:flex-col items-center justify-between lg:justify-start lg:gap-6 text-white transition-all duration-300 relative ${
+        className={`bg-gray-900 px-3 py-4 sm:p-4 md:p-5 flex lg:flex-col items-center justify-between lg:justify-start lg:gap-6 text-white transition-all duration-300 relative lg:sticky lg:top-0 lg:h-screen lg:z-40 lg:flex-shrink-0 ${
           isCollapsed ? "lg:w-20 xl:w-20" : "lg:w-72 xl:w-96"
         }`}
       >
@@ -264,18 +279,21 @@ export default function AdminNavbar() {
                   </Link>
                 );
               })}
-              <Link
-                href="/admin/login"
-                className={`flex items-center gap-2 px-4 py-3 rounded-lg text-red-500 hover:bg-gray-800 active:bg-gray-800/90 transition-colors duration-150 cursor-pointer text-base sm:text-lg ${
+              <button
+                onClick={handleSignOut}
+                disabled={isSigningOut}
+                className={`flex items-center gap-2 px-4 py-3 rounded-lg text-red-500 hover:bg-gray-800 active:bg-gray-800/90 transition-colors duration-150 cursor-pointer text-base sm:text-lg disabled:opacity-60 disabled:cursor-not-allowed ${
                   isCollapsed ? "justify-center" : ""
                 }`}
                 title={isCollapsed ? "Sign out" : undefined}
               >
                 <LogOut className="size-5 sm:size-6 flex-shrink-0" />
                 {!isCollapsed && (
-                  <span className="whitespace-nowrap">Sign out</span>
+                  <span className="whitespace-nowrap">
+                    {isSigningOut ? "Signing out..." : "Sign out"}
+                  </span>
                 )}
-              </Link>
+              </button>
             </div>
           </div>
         </div>
@@ -389,13 +407,14 @@ export default function AdminNavbar() {
                     </Link>
                   );
                 })}
-                <Link
-                  href="/admin/login"
-                  className="flex items-center gap-2 px-4 py-3 rounded-lg text-red-500 hover:bg-gray-800 active:bg-gray-800/90 transition-colors duration-150 cursor-pointer text-base sm:text-lg"
+                <button
+                  onClick={handleSignOut}
+                  disabled={isSigningOut}
+                  className="flex items-center gap-2 px-4 py-3 rounded-lg text-red-500 hover:bg-gray-800 active:bg-gray-800/90 transition-colors duration-150 cursor-pointer text-base sm:text-lg disabled:opacity-60 disabled:cursor-not-allowed w-full"
                 >
                   <LogOut className="size-5 sm:size-6" />
-                  Sign out
-                </Link>
+                  {isSigningOut ? "Signing out..." : "Sign out"}
+                </button>
               </div>
             </div>
           </div>
