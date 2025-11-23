@@ -501,8 +501,8 @@ export default function TopupTransactions() {
           </div>
         </div>
         
-        {/* Icon Skeleton - Positioned at right edge */}
-        <div className="absolute top-3 right-3 rounded-full p-3 bg-yellow-600/40">
+        {/* Icon Skeleton - Positioned at right edge, vertically centered */}
+        <div className="absolute top-1/2 -translate-y-1/2 right-3 rounded-full p-3 bg-yellow-600/40">
           <div className="w-6 h-6 bg-yellow-700/50 rounded-full"></div>
         </div>
       </div>

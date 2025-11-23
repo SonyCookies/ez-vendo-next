@@ -1021,10 +1021,15 @@ export default function TopUpRequests() {
         {/* Search Bar and Sort Filters Skeleton */}
         <div className="flex flex-col gap-4">
           {/* Search Bar Skeleton */}
-          <div className="flex flex-col gap-1 w-full">
-            <div className="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
-            <div className="h-12 w-full bg-gray-200 rounded-lg animate-pulse"></div>
-          </div>
+          <form className="flex">
+            <div className="flex flex-col gap-1 w-full">
+              <div className="flex items-center justify-between mt-2">
+                <div className="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
+                <div className="h-8 w-24 bg-gray-200 rounded-lg animate-pulse"></div>
+              </div>
+              <div className="h-12 w-full bg-gray-200 rounded-lg animate-pulse"></div>
+            </div>
+          </form>
 
           {/* Sort Filters Skeleton */}
           <div className="flex flex-col gap-2">
