@@ -561,7 +561,7 @@ export default function AllTransactions({ packageFilter = "all" }) {
   const SkeletonLoader = () => (
     <div className="flex flex-col xl:flex-1 gap-4">
       {/* Total Card Skeleton */}
-      <div className="flex relative rounded-2xl overflow-hidden bg-gradient-to-r from-yellow-400 via-yellow-300 to-yellow-400 p-5 text-white animate-pulse">
+      <div className="flex relative rounded-2xl overflow-hidden bg-linear-to-r from-yellow-400 via-yellow-300 to-yellow-400 p-5 text-white animate-pulse">
         <div className="flex flex-1 flex-col gap-2">
           <div className="h-9 sm:h-10 w-20 bg-yellow-600/50 rounded"></div>
           <div className="flex flex-col gap-0.5">
@@ -909,14 +909,14 @@ export default function AllTransactions({ packageFilter = "all" }) {
                 ? "translate-y-[150vh] opacity-0 scale-95" 
                 : isOpening
                 ? "translate-y-0 opacity-100 scale-100"
-                : "translate-y-[20px] opacity-0 scale-[0.95]"
+                : "translate-y-5 opacity-0 scale-[0.95]"
             }`}
             onClick={(e) => e.stopPropagation()}
           >
             {/* CLOSE BUTTON - Top Middle */}
             <button
               onClick={closeModal}
-              className="absolute top-[-16px] left-1/2 transform -translate-x-1/2 z-10 p-2 cursor-pointer rounded-full bg-white border-2 border-gray-300 hover:bg-gray-50 hover:border-gray-400 active:bg-gray-100 transition-all duration-150 text-gray-600 shadow-lg"
+              className="absolute -top-4 left-1/2 transform -translate-x-1/2 z-10 p-2 cursor-pointer rounded-full bg-white border-2 border-gray-300 hover:bg-gray-50 hover:border-gray-400 active:bg-gray-100 transition-all duration-150 text-gray-600 shadow-lg"
             >
               <ChevronDown className="size-5 sm:size-6" />
             </button>
