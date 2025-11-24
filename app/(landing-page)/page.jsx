@@ -14,10 +14,69 @@ import {
   ArrowRight,
   Smartphone,
   Clock,
+  Download,
 } from "lucide-react";
 import Image from "next/image";
+import { useState, useEffect } from "react";
 
 export default function Home() {
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isInstallable, setIsInstallable] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(false);
+
+  useEffect(() => {
+    // Check if app is already installed
+    if (window.matchMedia("(display-mode: standalone)").matches) {
+      setIsInstalled(true);
+      return;
+    }
+
+    // Listen for beforeinstallprompt event
+    const handleBeforeInstallPrompt = (e) => {
+      // Prevent the default browser install prompt
+      e.preventDefault();
+      // Store the event for later use
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    };
+
+    // Listen for app installed event
+    const handleAppInstalled = () => {
+      setIsInstalled(true);
+      setIsInstallable(false);
+      setDeferredPrompt(null);
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) {
+      return;
+    }
+
+    // Show the install prompt
+    deferredPrompt.prompt();
+
+    // Wait for the user to respond
+    const { outcome } = await deferredPrompt.userChoice;
+
+    if (outcome === "accepted") {
+      console.log("User accepted the install prompt");
+    } else {
+      console.log("User dismissed the install prompt");
+    }
+
+    // Clear the deferred prompt
+    setDeferredPrompt(null);
+    setIsInstallable(false);
+  };
   return (
     <main className="w-full min-h-dvh bg-white overflow-x-hidden">
       {/* ===== ANIMATED BACKGROUND PATTERN ===== */}
@@ -102,6 +161,16 @@ export default function Home() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-4">
+            {/* Install App Button in Nav - Only shows when app is installable */}
+            {isInstallable && !isInstalled && (
+              <button
+                onClick={handleInstallClick}
+                className="hidden sm:flex px-4 sm:px-5 py-2 rounded-full bg-linear-to-r from-blue-600 to-blue-500 text-white text-xs sm:text-sm font-semibold hover:shadow-lg hover:shadow-blue-500/30 transform hover:-translate-y-0.5 transition-all duration-150 cursor-pointer items-center gap-2"
+              >
+                <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="hidden md:inline">Install</span>
+              </button>
+            )}
             <a href="/login" className="block">
               <button className="px-4 sm:px-6 py-2 rounded-full border-2 border-emerald-600 text-emerald-600 text-xs sm:text-sm font-semibold hover:bg-emerald-50 transition-all duration-150 cursor-pointer">
                 Login
@@ -155,6 +224,22 @@ export default function Home() {
                 Learn More
               </button>
             </a>
+            {/* Install App Button - Only shows when app is installable */}
+            {isInstallable && !isInstalled && (
+              <button
+                onClick={handleInstallClick}
+                className="px-8 py-4 rounded-full bg-linear-to-r from-blue-600 to-blue-500 text-white font-semibold text-base cursor-pointer hover:shadow-2xl hover:shadow-blue-500/40 transform hover:-translate-y-1 transition-all duration-300 flex items-center justify-center gap-2 animate-pulse"
+              >
+                <Download className="w-4 h-4" />
+                Install App
+              </button>
+            )}
+            {isInstalled && (
+              <div className="px-6 py-3 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-700 font-medium text-sm flex items-center justify-center gap-2">
+                <CheckCircle2 className="w-4 h-4" />
+                App Installed
+              </div>
+            )}
           </div>
 
           {/* Hero Visual - Stats Grid */}
@@ -689,9 +774,27 @@ export default function Home() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button className="px-8 py-4 rounded-full bg-linear-to-r from-emerald-600 to-emerald-500 text-white font-semibold text-base cursor-pointer hover:shadow-2xl hover:shadow-emerald-500/40 transform hover:-translate-y-1 transition-all duration-300 flex items-center justify-center gap-2">
-              Get Started Today <ArrowRight className="w-4 h-4" />
-            </button>
+            <a href="/login">
+              <button className="px-8 py-4 rounded-full bg-linear-to-r from-emerald-600 to-emerald-500 text-white font-semibold text-base cursor-pointer hover:shadow-2xl hover:shadow-emerald-500/40 transform hover:-translate-y-1 transition-all duration-300 flex items-center justify-center gap-2">
+                Get Started Today <ArrowRight className="w-4 h-4" />
+              </button>
+            </a>
+            {/* Install App Button in CTA - Only shows when app is installable */}
+            {isInstallable && !isInstalled && (
+              <button
+                onClick={handleInstallClick}
+                className="px-8 py-4 rounded-full bg-linear-to-r from-blue-600 to-blue-500 text-white font-semibold text-base cursor-pointer hover:shadow-2xl hover:shadow-blue-500/40 transform hover:-translate-y-1 transition-all duration-300 flex items-center justify-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Install App
+              </button>
+            )}
+            {isInstalled && (
+              <div className="px-6 py-4 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-700 font-semibold text-base flex items-center justify-center gap-2">
+                <CheckCircle2 className="w-4 h-4" />
+                App Installed
+              </div>
+            )}
           </div>
         </div>
       </section>
