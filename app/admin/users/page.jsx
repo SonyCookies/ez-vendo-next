@@ -4,6 +4,7 @@ import AdminDesktopNavbar from "../components/AdminDesktopNavbar";
 import AdminNavbar from "../components/AdminNavbar";
 import RegisteredUsers from "./components/RegisteredUsers";
 import UnregisteredUsers from "./components/UnregisteredUsers";
+import RegisterUser from "./components/RegisterUser";
 
 import { useState } from "react";
 
@@ -42,11 +43,19 @@ export default function AdminUsers() {
             >
               Unregistered Users
             </button>
+
+            <button
+              onClick={() => setActiveTab("register")}
+              className={getButtonClass("register")}
+            >
+              Register User
+            </button>
           </div>
 
           {/* SAFE COMPONENT RENDERING */}
           {activeTab === "registered" && <RegisteredUsers />}
           {activeTab === "unregistered" && <UnregisteredUsers />}
+          {activeTab === "register" && <RegisterUser />}
         </div>
       </div>
     </div>

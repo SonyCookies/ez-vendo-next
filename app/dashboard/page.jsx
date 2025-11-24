@@ -23,6 +23,7 @@ import {
   ChevronRight,
   CircleStop,
   TimerOff,
+  Loader2,
 } from "lucide-react";
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -60,10 +61,16 @@ function DashboardContent() {
   // Billing and purchase state
   const [billingRatePerMinute, setBillingRatePerMinute] = useState(0.175);
   const [showPurchaseConfirm, setShowPurchaseConfirm] = useState(false);
+  const [isPurchaseConfirmOpening, setIsPurchaseConfirmOpening] = useState(false);
+  const [isPurchaseConfirmClosing, setIsPurchaseConfirmClosing] = useState(false);
   const [selectedMinutes, setSelectedMinutes] = useState(null);
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [showPurchaseSuccess, setShowPurchaseSuccess] = useState(false);
+  const [isPurchaseSuccessOpening, setIsPurchaseSuccessOpening] = useState(false);
+  const [isPurchaseSuccessClosing, setIsPurchaseSuccessClosing] = useState(false);
   const [showPurchaseError, setShowPurchaseError] = useState(false);
+  const [isPurchaseErrorOpening, setIsPurchaseErrorOpening] = useState(false);
+  const [isPurchaseErrorClosing, setIsPurchaseErrorClosing] = useState(false);
   const [purchaseMessage, setPurchaseMessage] = useState("");
   
   // Top-up state
@@ -620,12 +627,26 @@ function DashboardContent() {
     
     if (currentBalance < cost) {
       setPurchaseMessage(`Insufficient balance! You need ₱${cost.toFixed(2)} but only have ₱${currentBalance.toFixed(2)}`);
+      setIsPurchaseErrorClosing(false);
+      setIsPurchaseErrorOpening(false);
       setShowPurchaseError(true);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setIsPurchaseErrorOpening(true);
+        });
+      });
       return;
     }
     
     setSelectedMinutes(minutes);
+    setIsPurchaseConfirmClosing(false);
+    setIsPurchaseConfirmOpening(false);
     setShowPurchaseConfirm(true);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setIsPurchaseConfirmOpening(true);
+      });
+    });
   };
 
   // Purchase time package
@@ -754,15 +775,27 @@ function DashboardContent() {
         });
       }
       
-      // Close confirmation modal
-      setShowPurchaseConfirm(false);
-      setSelectedMinutes(null);
-      setIsPurchasing(false);
-      
-      // Show success modal
-      const totalMinutes = Math.floor(timeToAdd / 60);
-      setPurchaseMessage(`${selectedMinutes} ${selectedMinutes === 1 ? 'minute' : 'minutes'} purchased! Total time available: ${totalMinutes} ${totalMinutes === 1 ? 'minute' : 'minutes'}`);
-      setShowPurchaseSuccess(true);
+      // Close confirmation modal with animation
+      setIsPurchaseConfirmOpening(false);
+      setIsPurchaseConfirmClosing(true);
+      setTimeout(() => {
+        setShowPurchaseConfirm(false);
+        setIsPurchaseConfirmClosing(false);
+        setSelectedMinutes(null);
+        setIsPurchasing(false);
+        
+        // Show success modal
+        const totalMinutes = Math.floor(timeToAdd / 60);
+        setPurchaseMessage(`${selectedMinutes} ${selectedMinutes === 1 ? 'minute' : 'minutes'} purchased! Total time available: ${totalMinutes} ${totalMinutes === 1 ? 'minute' : 'minutes'}`);
+        setIsPurchaseSuccessClosing(false);
+        setIsPurchaseSuccessOpening(false);
+        setShowPurchaseSuccess(true);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setIsPurchaseSuccessOpening(true);
+          });
+        });
+      }, 300);
       
     } catch (error) {
       console.error("❌ Error purchasing time:", error);
@@ -771,7 +804,20 @@ function DashboardContent() {
       setSelectedMinutes(null);
       
       setPurchaseMessage("Failed to purchase time package. Please try again.");
-      setShowPurchaseError(true);
+      setIsPurchaseConfirmOpening(false);
+      setIsPurchaseConfirmClosing(true);
+      setTimeout(() => {
+        setShowPurchaseConfirm(false);
+        setIsPurchaseConfirmClosing(false);
+        setIsPurchaseErrorClosing(false);
+        setIsPurchaseErrorOpening(false);
+        setShowPurchaseError(true);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setIsPurchaseErrorOpening(true);
+          });
+        });
+      }, 300);
     }
   };
 
@@ -2185,53 +2231,131 @@ function DashboardContent() {
 
       {/* Purchase Confirmation Modal */}
       {showPurchaseConfirm && selectedMinutes && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
-            <h3 className="text-xl font-bold text-slate-900 mb-4">
-              Confirm Purchase
-            </h3>
-            <div className="space-y-4 mb-6">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Time Package:</span>
-                <span className="font-semibold">{selectedMinutes} {selectedMinutes === 1 ? 'minute' : 'minutes'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Cost:</span>
-                <span className="font-semibold text-green-600">₱{(selectedMinutes * billingRatePerMinute).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Current Balance:</span>
-                <span className="font-semibold">₱{typeof userData?.balance === 'number' ? userData.balance.toFixed(2) : "0.00"}</span>
-              </div>
-              <div className="flex justify-between border-t pt-2">
-                <span className="text-gray-600">Balance After:</span>
-                <span className={`font-semibold ${
-                  (typeof userData?.balance === 'number' ? userData.balance : 0) - (selectedMinutes * billingRatePerMinute) < 0 
-                    ? 'text-red-600' 
-                    : 'text-gray-800'
-                }`}>
-                  ₱{((typeof userData?.balance === 'number' ? userData.balance : 0) - (selectedMinutes * billingRatePerMinute)).toFixed(2)}
+        <div 
+          className={`fixed inset-0 bg-black/60 flex items-center justify-center p-4 sm:p-5 z-50 overflow-y-auto transition-opacity duration-300 ${
+            isPurchaseConfirmClosing ? "opacity-0" : "opacity-100"
+          }`}
+          onClick={() => {
+            if (!isPurchasing) {
+              setIsPurchaseConfirmOpening(false);
+              setIsPurchaseConfirmClosing(true);
+              setTimeout(() => {
+                setShowPurchaseConfirm(false);
+                setIsPurchaseConfirmClosing(false);
+                setSelectedMinutes(null);
+              }, 300);
+            }
+          }}
+        >
+          <div 
+            className={`rounded-2xl relative bg-white w-full max-w-5xl flex flex-col gap-3 mt-2 mb-2 transition-all duration-300 ease-in-out ${
+              isPurchaseConfirmClosing 
+                ? "translate-y-[150vh] opacity-0 scale-95" 
+                : isPurchaseConfirmOpening
+                ? "translate-y-0 opacity-100 scale-100"
+                : "translate-y-[20px] opacity-0 scale-[0.95]"
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* CLOSE BUTTON - Top Middle */}
+            <button
+              onClick={() => {
+                if (!isPurchasing) {
+                  setIsPurchaseConfirmOpening(false);
+                  setIsPurchaseConfirmClosing(true);
+                  setTimeout(() => {
+                    setShowPurchaseConfirm(false);
+                    setIsPurchaseConfirmClosing(false);
+                    setSelectedMinutes(null);
+                  }, 300);
+                }
+              }}
+              className="absolute top-[-16px] left-1/2 transform -translate-x-1/2 z-10 p-2 cursor-pointer rounded-full bg-white border-2 border-gray-300 hover:bg-gray-50 hover:border-gray-400 active:bg-gray-100 transition-all duration-150 text-gray-600 shadow-lg"
+            >
+              <ChevronDown className="size-5 sm:size-6" />
+            </button>
+
+            {/* HEADER CARD */}
+            <div className="flex relative rounded-t-2xl p-4 sm:p-5 text-white bg-gradient-to-r from-emerald-500 via-emerald-400 to-emerald-500">
+              <div className="flex flex-1 flex-col gap-1">
+                <span className="text-xl sm:text-2xl font-bold">
+                  Confirm Purchase
                 </span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs sm:text-sm font-semibold text-white">
+                    Time Package Purchase
+                  </span>
+                  <span className="text-xs text-gray-100">
+                    Review your purchase details before confirming
+                  </span>
+                </div>
+              </div>
+              <div className="absolute top-3 right-3 rounded-full p-2.5 sm:p-3 bg-emerald-600/40 shadow-emerald-600/40">
+                <Package className="size-5 sm:size-6" />
               </div>
             </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setShowPurchaseConfirm(false);
-                  setSelectedMinutes(null);
-                }}
-                disabled={isPurchasing}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={purchaseTimePackage}
-                disabled={isPurchasing || (typeof userData?.balance === 'number' ? userData.balance : 0) < (selectedMinutes * billingRatePerMinute)}
-                className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {isPurchasing ? "Processing..." : "Confirm"}
-              </button>
+
+            {/* MAIN CONTENT */}
+            <div className="flex flex-col gap-3 p-4 sm:p-5">
+              <div className="flex flex-col gap-3 p-4 rounded-lg border border-gray-300 bg-gray-50">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs sm:text-sm text-gray-500">Time Package:</span>
+                  <span className="text-sm sm:text-base font-semibold">{selectedMinutes} {selectedMinutes === 1 ? 'minute' : 'minutes'}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs sm:text-sm text-gray-500">Cost:</span>
+                  <span className="text-sm sm:text-base font-semibold text-emerald-600">₱{(selectedMinutes * billingRatePerMinute).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs sm:text-sm text-gray-500">Current Balance:</span>
+                  <span className="text-sm sm:text-base font-semibold">₱{typeof userData?.balance === 'number' ? userData.balance.toFixed(2) : "0.00"}</span>
+                </div>
+                <div className="flex justify-between items-center border-t border-gray-300 pt-3">
+                  <span className="text-xs sm:text-sm text-gray-500">Balance After:</span>
+                  <span className={`text-sm sm:text-base font-semibold ${
+                    (typeof userData?.balance === 'number' ? userData.balance : 0) - (selectedMinutes * billingRatePerMinute) < 0 
+                      ? 'text-red-600' 
+                      : 'text-gray-800'
+                  }`}>
+                    ₱{((typeof userData?.balance === 'number' ? userData.balance : 0) - (selectedMinutes * billingRatePerMinute)).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex gap-2 items-center justify-end w-full mt-2">
+                <button
+                  onClick={() => {
+                    if (!isPurchasing) {
+                      setIsPurchaseConfirmOpening(false);
+                      setIsPurchaseConfirmClosing(true);
+                      setTimeout(() => {
+                        setShowPurchaseConfirm(false);
+                        setIsPurchaseConfirmClosing(false);
+                        setSelectedMinutes(null);
+                      }, 300);
+                    }
+                  }}
+                  disabled={isPurchasing}
+                  className="bg-red-500 text-white rounded-lg px-4 py-2 hover:bg-red-500/90 active:bg-red-600 transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Discard
+                </button>
+                <button
+                  onClick={purchaseTimePackage}
+                  disabled={isPurchasing || (typeof userData?.balance === 'number' ? userData.balance : 0) < (selectedMinutes * billingRatePerMinute)}
+                  className="bg-emerald-500 text-white rounded-lg px-4 py-2 hover:bg-emerald-500/90 active:bg-emerald-600 transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isPurchasing ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      <span>Processing...</span>
+                    </>
+                  ) : (
+                    "Confirm"
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -2239,46 +2363,182 @@ function DashboardContent() {
 
       {/* Purchase Success Modal */}
       {showPurchaseSuccess && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
-            <div className="flex flex-col items-center gap-4 mb-4">
-              <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
-                <Package className="size-8 text-green-600" />
+        <div 
+          className={`fixed inset-0 bg-black/60 flex items-center justify-center p-4 sm:p-5 z-50 overflow-y-auto transition-opacity duration-300 ${
+            isPurchaseSuccessClosing ? "opacity-0" : "opacity-100"
+          }`}
+          onClick={() => {
+            setIsPurchaseSuccessOpening(false);
+            setIsPurchaseSuccessClosing(true);
+            setTimeout(() => {
+              setShowPurchaseSuccess(false);
+              setIsPurchaseSuccessClosing(false);
+            }, 300);
+          }}
+        >
+          <div 
+            className={`rounded-2xl relative bg-white w-full max-w-5xl flex flex-col gap-3 mt-2 mb-2 transition-all duration-300 ease-in-out ${
+              isPurchaseSuccessClosing 
+                ? "translate-y-[150vh] opacity-0 scale-95" 
+                : isPurchaseSuccessOpening
+                ? "translate-y-0 opacity-100 scale-100"
+                : "translate-y-[20px] opacity-0 scale-[0.95]"
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* CLOSE BUTTON - Top Middle */}
+            <button
+              onClick={() => {
+                setIsPurchaseSuccessOpening(false);
+                setIsPurchaseSuccessClosing(true);
+                setTimeout(() => {
+                  setShowPurchaseSuccess(false);
+                  setIsPurchaseSuccessClosing(false);
+                }, 300);
+              }}
+              className="absolute top-[-16px] left-1/2 transform -translate-x-1/2 z-10 p-2 cursor-pointer rounded-full bg-white border-2 border-gray-300 hover:bg-gray-50 hover:border-gray-400 active:bg-gray-100 transition-all duration-150 text-gray-600 shadow-lg"
+            >
+              <ChevronDown className="size-5 sm:size-6" />
+            </button>
+
+            {/* HEADER CARD */}
+            <div className="flex relative rounded-t-2xl p-4 sm:p-5 text-white bg-gradient-to-r from-emerald-500 via-emerald-400 to-emerald-500">
+              <div className="flex flex-1 flex-col gap-1">
+                <span className="text-xl sm:text-2xl font-bold">
+                  Purchase Successful
+                </span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs sm:text-sm font-semibold text-white">
+                    Time Package Purchased
+                  </span>
+                  <span className="text-xs text-gray-100">
+                    {purchaseMessage}
+                  </span>
+                </div>
               </div>
-              <div className="text-center">
-                <h3 className="text-xl font-bold text-green-600 mb-2">Success!</h3>
-                <p className="text-gray-600">{purchaseMessage}</p>
+              <div className="absolute top-3 right-3 rounded-full p-2.5 sm:p-3 bg-emerald-600/40 shadow-emerald-600/40">
+                <CheckCircle className="size-5 sm:size-6" />
               </div>
             </div>
-            <button
-              onClick={() => setShowPurchaseSuccess(false)}
-              className="w-full px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
-            >
-              OK
-            </button>
+
+            {/* MAIN CONTENT */}
+            <div className="flex flex-col gap-4 p-4 sm:p-5 items-center justify-center min-h-[200px]">
+              <div className="rounded-full p-4 bg-emerald-100">
+                <Package className="size-8 sm:size-10 text-emerald-600" />
+              </div>
+              <div className="flex flex-col text-center gap-2">
+                <span className="text-lg sm:text-xl font-semibold text-emerald-600">
+                  Success!
+                </span>
+                <span className="text-sm sm:text-base text-gray-600">
+                  {purchaseMessage}
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  setIsPurchaseSuccessOpening(false);
+                  setIsPurchaseSuccessClosing(true);
+                  setTimeout(() => {
+                    setShowPurchaseSuccess(false);
+                    setIsPurchaseSuccessClosing(false);
+                  }, 300);
+                }}
+                className="mt-4 px-6 py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white font-medium text-sm sm:text-base transition-all duration-150 shadow-md hover:shadow-lg"
+              >
+                OK
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* Purchase Error Modal */}
       {showPurchaseError && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
-            <div className="flex flex-col items-center gap-4 mb-4">
-              <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center">
-                <X className="size-8 text-red-600" />
+        <div 
+          className={`fixed inset-0 bg-black/60 flex items-center justify-center p-4 sm:p-5 z-50 overflow-y-auto transition-opacity duration-300 ${
+            isPurchaseErrorClosing ? "opacity-0" : "opacity-100"
+          }`}
+          onClick={() => {
+            setIsPurchaseErrorOpening(false);
+            setIsPurchaseErrorClosing(true);
+            setTimeout(() => {
+              setShowPurchaseError(false);
+              setIsPurchaseErrorClosing(false);
+            }, 300);
+          }}
+        >
+          <div 
+            className={`rounded-2xl relative bg-white w-full max-w-5xl flex flex-col gap-3 mt-2 mb-2 transition-all duration-300 ease-in-out ${
+              isPurchaseErrorClosing 
+                ? "translate-y-[150vh] opacity-0 scale-95" 
+                : isPurchaseErrorOpening
+                ? "translate-y-0 opacity-100 scale-100"
+                : "translate-y-[20px] opacity-0 scale-[0.95]"
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* CLOSE BUTTON - Top Middle */}
+            <button
+              onClick={() => {
+                setIsPurchaseErrorOpening(false);
+                setIsPurchaseErrorClosing(true);
+                setTimeout(() => {
+                  setShowPurchaseError(false);
+                  setIsPurchaseErrorClosing(false);
+                }, 300);
+              }}
+              className="absolute top-[-16px] left-1/2 transform -translate-x-1/2 z-10 p-2 cursor-pointer rounded-full bg-white border-2 border-gray-300 hover:bg-gray-50 hover:border-gray-400 active:bg-gray-100 transition-all duration-150 text-gray-600 shadow-lg"
+            >
+              <ChevronDown className="size-5 sm:size-6" />
+            </button>
+
+            {/* HEADER CARD */}
+            <div className="flex relative rounded-t-2xl p-4 sm:p-5 text-white bg-gradient-to-r from-red-500 via-red-400 to-red-500">
+              <div className="flex flex-1 flex-col gap-1">
+                <span className="text-xl sm:text-2xl font-bold">
+                  Purchase Failed
+                </span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs sm:text-sm font-semibold text-white">
+                    Error
+                  </span>
+                  <span className="text-xs text-gray-100">
+                    {purchaseMessage}
+                  </span>
+                </div>
               </div>
-              <div className="text-center">
-                <h3 className="text-xl font-bold text-red-600 mb-2">Error</h3>
-                <p className="text-gray-600">{purchaseMessage}</p>
+              <div className="absolute top-3 right-3 rounded-full p-2.5 sm:p-3 bg-red-600/40 shadow-red-600/40">
+                <X className="size-5 sm:size-6" />
               </div>
             </div>
-            <button
-              onClick={() => setShowPurchaseError(false)}
-              className="w-full px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-            >
-              OK
-            </button>
+
+            {/* MAIN CONTENT */}
+            <div className="flex flex-col gap-4 p-4 sm:p-5 items-center justify-center min-h-[200px]">
+              <div className="rounded-full p-4 bg-red-100">
+                <X className="size-8 sm:size-10 text-red-600" />
+              </div>
+              <div className="flex flex-col text-center gap-2">
+                <span className="text-lg sm:text-xl font-semibold text-red-600">
+                  Error
+                </span>
+                <span className="text-sm sm:text-base text-gray-600">
+                  {purchaseMessage}
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  setIsPurchaseErrorOpening(false);
+                  setIsPurchaseErrorClosing(true);
+                  setTimeout(() => {
+                    setShowPurchaseError(false);
+                    setIsPurchaseErrorClosing(false);
+                  }, 300);
+                }}
+                className="mt-4 px-6 py-2.5 rounded-lg bg-red-500 hover:bg-red-600 active:bg-red-700 text-white font-medium text-sm sm:text-base transition-all duration-150 shadow-md hover:shadow-lg"
+              >
+                OK
+              </button>
+            </div>
           </div>
         </div>
       )}

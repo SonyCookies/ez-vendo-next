@@ -3,6 +3,7 @@ const { parse } = require('url');
 const next = require('next');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0'; // Listen on all interfaces
@@ -10,6 +11,20 @@ const port = 3000;
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
+
+// Function to get local IP address
+function getLocalIP() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      // Skip internal (loopback) and non-IPv4 addresses
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return 'localhost';
+}
 
 // Paths to certificate files
 const certPath = path.join(__dirname, 'cert.pem');
@@ -39,8 +54,9 @@ app.prepare().then(() => {
     }
   }).listen(port, hostname, (err) => {
     if (err) throw err;
-    console.log(`\n✅ Ready on https://${hostname === '0.0.0.0' ? 'localhost' : hostname}:${port}`);
-    console.log(`   Also accessible via: https://192.168.1.50:${port}`);
+    const localIP = getLocalIP();
+    console.log(`\n✅ Ready on https://localhost:${port}`);
+    console.log(`   Also accessible via: https://${localIP}:${port}`);
     console.log(`   (Use your local IP address)\n`);
   });
 });

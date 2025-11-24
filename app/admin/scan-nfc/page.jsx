@@ -19,9 +19,12 @@ import {
   MapPin,
   Users,
   ChevronDown,
+  Loader2,
+  CheckCircle,
+  X,
 } from "lucide-react";
 import { useState, useEffect } from "react";
-import { db } from "../../../firebase";
+import { db, auth } from "../../../firebase";
 import {
   collection,
   getDocs,
@@ -30,7 +33,10 @@ import {
   doc,
   getDoc,
   orderBy,
+  setDoc,
+  serverTimestamp,
 } from "firebase/firestore";
+import { createUserWithEmailAndPassword } from "firebase/auth";
 import AdminDesktopNavbar from "../components/AdminDesktopNavbar";
 import AdminNavbar from "../components/AdminNavbar";
 
@@ -48,6 +54,25 @@ export default function ScanNfc() {
   const [activeTab, setActiveTab] = useState("overview");
   const [loading, setLoading] = useState(false);
   const [userData, setUserData] = useState(null);
+
+  // Registration states
+  const [showRegistrationPrompt, setShowRegistrationPrompt] = useState(false);
+  const [showRegistrationForm, setShowRegistrationForm] = useState(false);
+  const [isRegistrationFormOpening, setIsRegistrationFormOpening] = useState(false);
+  const [isRegistrationFormClosing, setIsRegistrationFormClosing] = useState(false);
+  const [registrationFormData, setRegistrationFormData] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    phone: "",
+    birthday: "",
+    address: "",
+  });
+  const [registrationErrors, setRegistrationErrors] = useState({});
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [registrationMessage, setRegistrationMessage] = useState({ type: null, text: null });
 
   // User summary data
   const [pendingRequests, setPendingRequests] = useState([]);
@@ -88,6 +113,186 @@ export default function ScanNfc() {
       return `${hours} hour${hours > 1 ? "s" : ""} ${minutes} minute${minutes !== 1 ? "s" : ""}`;
     }
     return `${minutes} minute${minutes !== 1 ? "s" : ""}`;
+  };
+
+  // Password hashing function
+  const hashPassword = async (password) => {
+    if (typeof crypto !== 'undefined' && crypto.subtle) {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(password);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      return hashHex;
+    } else {
+      let hash = 0;
+      for (let i = 0; i < password.length; i++) {
+        const char = password.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash;
+      }
+      return Math.abs(hash).toString(16).padStart(8, '0') + '_dev';
+    }
+  };
+
+  // Validate email
+  const validateEmail = (email) => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
+
+  // Validate phone (Philippines format)
+  const validatePhone = (phone) => {
+    const cleaned = phone.replace(/\D/g, '');
+    return cleaned.length >= 10 && cleaned.length <= 11;
+  };
+
+  // Validate registration form
+  const validateRegistrationForm = () => {
+    const errors = {};
+    
+    if (!registrationFormData.firstName.trim()) {
+      errors.firstName = "First name is required";
+    }
+    if (!registrationFormData.lastName.trim()) {
+      errors.lastName = "Last name is required";
+    }
+    if (!registrationFormData.email.trim()) {
+      errors.email = "Email is required";
+    } else if (!validateEmail(registrationFormData.email)) {
+      errors.email = "Invalid email format";
+    }
+    if (!registrationFormData.password) {
+      errors.password = "Password is required";
+    } else if (registrationFormData.password.length < 8) {
+      errors.password = "Password must be at least 8 characters";
+    }
+    if (registrationFormData.password !== registrationFormData.confirmPassword) {
+      errors.confirmPassword = "Passwords do not match";
+    }
+    if (registrationFormData.phone && !validatePhone(registrationFormData.phone)) {
+      errors.phone = "Invalid phone number format";
+    }
+
+    setRegistrationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  // Handle registration form change
+  const handleRegistrationChange = (e) => {
+    const { name, value } = e.target;
+    setRegistrationFormData(prev => ({ ...prev, [name]: value }));
+    setRegistrationErrors(prev => ({ ...prev, [name]: null }));
+    setRegistrationMessage({ type: null, text: null });
+  };
+
+  // Handle registration submit
+  const handleRegistrationSubmit = async (e) => {
+    e.preventDefault();
+    setRegistrationMessage({ type: null, text: null });
+
+    if (!validateRegistrationForm()) {
+      setRegistrationMessage({
+        type: "error",
+        text: "Please correct the errors before submitting",
+      });
+      return;
+    }
+
+    setIsRegistering(true);
+    try {
+      const email = registrationFormData.email.toLowerCase().trim();
+      
+      // Step 1: Create Firebase Auth user
+      let authUser;
+      try {
+        authUser = await createUserWithEmailAndPassword(auth, email, registrationFormData.password);
+        console.log("✅ Firebase Auth user created:", authUser.user.uid);
+      } catch (authError) {
+        console.error("❌ Firebase Auth error:", authError);
+        const code = authError.code || "auth/error";
+        let message = "Failed to create authentication account";
+        
+        if (code === "auth/email-already-in-use") {
+          message = "This email is already registered. Please use a different email.";
+        } else if (code === "auth/invalid-email") {
+          message = "Invalid email address format.";
+        } else if (code === "auth/weak-password") {
+          message = "Password is too weak. Please use a stronger password.";
+        }
+        
+        throw new Error(message);
+      }
+
+      // Step 2: Hash password
+      const hashedPassword = await hashPassword(registrationFormData.password);
+
+      // Step 3: Save user data to Firestore
+      const userDocRef = doc(db, "users", scannedRfid);
+      const userData = {
+        rfidCardId: scannedRfid,
+        fullName: `${registrationFormData.firstName} ${registrationFormData.lastName}`,
+        firstName: registrationFormData.firstName,
+        lastName: registrationFormData.lastName,
+        email: email,
+        phone: registrationFormData.phone || "",
+        birthday: registrationFormData.birthday || "",
+        address: registrationFormData.address || "",
+        passwordHash: hashedPassword,
+        authUid: authUser.user.uid,
+        balance: 0,
+        status: "active",
+        isRegistered: true,
+        accountType: "user",
+        registeredAt: serverTimestamp(),
+        lastLogin: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        registrationMethod: "admin_nfc_scan",
+      };
+
+      await setDoc(userDocRef, userData);
+      console.log("✅ User registered successfully:", scannedRfid);
+
+      setRegistrationMessage({
+        type: "success",
+        text: `User "${registrationFormData.firstName} ${registrationFormData.lastName}" has been registered successfully!`,
+      });
+
+      // Reset form but keep modal open to show success message
+      setRegistrationFormData({
+        firstName: "",
+        lastName: "",
+        email: "",
+        password: "",
+        confirmPassword: "",
+        phone: "",
+        birthday: "",
+        address: "",
+      });
+      setRegistrationErrors({});
+      
+      // Close registration form after showing success (without fetching user data)
+      setTimeout(() => {
+        setIsRegistrationFormOpening(false);
+        setIsRegistrationFormClosing(true);
+        setTimeout(() => {
+          setShowRegistrationForm(false);
+          setIsRegistrationFormClosing(false);
+          setShowRegistrationPrompt(false);
+          // Clear scanned RFID so admin can scan another one
+          setScannedRfid("");
+          setUserData(null);
+        }, 300);
+      }, 2000);
+
+    } catch (error) {
+      console.error("❌ Registration error:", error);
+      setRegistrationMessage({
+        type: "error",
+        text: error.message || "Registration failed. Please try again.",
+      });
+    } finally {
+      setIsRegistering(false);
+    }
   };
 
   // Check NFC Support
@@ -261,6 +466,8 @@ export default function ScanNfc() {
       if (!userDocSnap.exists()) {
         setUserData(null);
         setLoading(false);
+        // Show registration prompt if user not found
+        setShowRegistrationPrompt(true);
         return;
       }
 
@@ -609,6 +816,12 @@ export default function ScanNfc() {
                   <span className="text-sm text-gray-600">
                     No user found with RFID: {scannedRfid}
                   </span>
+                  <button
+                    onClick={() => setShowRegistrationPrompt(true)}
+                    className="mt-4 px-6 py-2.5 rounded-lg bg-green-500 hover:bg-green-600 text-white font-medium transition-colors"
+                  >
+                    Register This User
+                  </button>
                 </div>
               </div>
             ) : (
@@ -1212,6 +1425,402 @@ export default function ScanNfc() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Registration Prompt Modal */}
+      {showRegistrationPrompt && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full">
+            <div className="flex items-center justify-center mb-4">
+              <div className="rounded-full p-4 bg-yellow-100">
+                <CircleAlert className="size-8 text-yellow-600" />
+              </div>
+            </div>
+            <div className="text-center mb-6">
+              <h3 className="text-xl font-bold mb-2">User Not Registered</h3>
+              <p className="text-gray-600 text-sm mb-2">
+                RFID: <span className="font-mono font-semibold">{scannedRfid}</span>
+              </p>
+              <p className="text-gray-600">
+                This RFID is not registered. Would you like to register this user now?
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowRegistrationPrompt(false);
+                  // Open registration form with animation
+                  setIsRegistrationFormClosing(false);
+                  setIsRegistrationFormOpening(false);
+                  setShowRegistrationForm(true);
+                  requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                      setIsRegistrationFormOpening(true);
+                    });
+                  });
+                }}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-green-500 hover:bg-green-600 text-white font-medium transition-colors"
+              >
+                Yes, Register
+              </button>
+              <button
+                onClick={() => {
+                  setShowRegistrationPrompt(false);
+                  setScannedRfid("");
+                  setUserData(null);
+                }}
+                className="flex-1 px-4 py-2.5 rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Registration Form Modal */}
+      {showRegistrationForm && (
+        <div 
+          className={`fixed inset-0 bg-black/60 flex items-center justify-center p-4 sm:p-5 z-50 overflow-y-auto transition-opacity duration-300 ${
+            isRegistrationFormClosing ? "opacity-0" : "opacity-100"
+          }`}
+          onClick={() => {
+            if (!isRegistering) {
+              setIsRegistrationFormOpening(false);
+              setIsRegistrationFormClosing(true);
+              setTimeout(() => {
+                setShowRegistrationForm(false);
+                setIsRegistrationFormClosing(false);
+                setRegistrationFormData({
+                  firstName: "",
+                  lastName: "",
+                  email: "",
+                  password: "",
+                  confirmPassword: "",
+                  phone: "",
+                  birthday: "",
+                  address: "",
+                });
+                setRegistrationErrors({});
+                setRegistrationMessage({ type: null, text: null });
+              }, 300);
+            }
+          }}
+        >
+          <div 
+            className={`rounded-2xl relative bg-white w-full max-w-5xl flex flex-col gap-3 mt-2 mb-2 transition-all duration-300 ease-in-out ${
+              isRegistrationFormClosing 
+                ? "translate-y-[150vh] opacity-0 scale-95" 
+                : isRegistrationFormOpening
+                ? "translate-y-0 opacity-100 scale-100"
+                : "translate-y-[20px] opacity-0 scale-[0.95]"
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* CLOSE BUTTON - Top Middle */}
+            <button
+              onClick={() => {
+                if (!isRegistering) {
+                  setIsRegistrationFormOpening(false);
+                  setIsRegistrationFormClosing(true);
+                  setTimeout(() => {
+                    setShowRegistrationForm(false);
+                    setIsRegistrationFormClosing(false);
+                    setRegistrationFormData({
+                      firstName: "",
+                      lastName: "",
+                      email: "",
+                      password: "",
+                      confirmPassword: "",
+                      phone: "",
+                      birthday: "",
+                      address: "",
+                    });
+                    setRegistrationErrors({});
+                    setRegistrationMessage({ type: null, text: null });
+                  }, 300);
+                }
+              }}
+              className="absolute top-[-16px] left-1/2 transform -translate-x-1/2 z-10 p-2 cursor-pointer rounded-full bg-white border-2 border-gray-300 hover:bg-gray-50 hover:border-gray-400 active:bg-gray-100 transition-all duration-150 text-gray-600 shadow-lg"
+            >
+              <ChevronDown className="size-5 sm:size-6" />
+            </button>
+
+            {/* HEADER CARD - Matching ManualTopUp Design */}
+            <div className="flex relative rounded-t-2xl p-4 sm:p-5 text-white bg-gradient-to-r from-green-500 via-green-400 to-green-500">
+              <div className="flex flex-1 flex-col gap-1">
+                <span className="text-xl sm:text-2xl font-bold">
+                  Register New User
+                </span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs sm:text-sm font-semibold text-white">
+                    RFID No. {scannedRfid}
+                  </span>
+                  <span className="text-xs text-gray-100">
+                    Complete the form below to register
+                  </span>
+                </div>
+              </div>
+              <div className="absolute top-3 right-3 rounded-full p-2.5 sm:p-3 bg-green-600/40 shadow-green-600/40">
+                <User className="size-5 sm:size-6" />
+              </div>
+            </div>
+
+            {/* MAIN CONTENT */}
+            <div className="flex flex-col gap-3 p-4 sm:p-5">
+              {/* Message */}
+              {registrationMessage.text && (
+                <div
+                  className={`px-4 py-2 rounded-lg flex items-center gap-3 border-l-4 ${
+                    registrationMessage.type === "error"
+                      ? "bg-red-100 text-red-500 border-red-500"
+                      : "bg-green-100 text-green-500 border-green-500"
+                  }`}
+                >
+                  {registrationMessage.type === "error" ? (
+                    <CircleAlert className="size-5 sm:size-6" />
+                  ) : (
+                    <CheckCircle className="size-5 sm:size-6" />
+                  )}
+                  <span className="text-xs sm:text-sm">{registrationMessage.text}</span>
+                </div>
+              )}
+
+              {/* Form */}
+              <form onSubmit={handleRegistrationSubmit} className="flex flex-col gap-3">
+                {/* Form Fields */}
+                <div className="grid grid-cols-2 gap-3">
+                {/* First Name */}
+                <div className="col-span-2 sm:col-span-1 flex flex-col gap-1">
+                  <label className="text-xs sm:text-sm text-gray-500">
+                    First Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="firstName"
+                    value={registrationFormData.firstName}
+                    onChange={handleRegistrationChange}
+                    className={`px-3 sm:px-4 py-2 w-full border ${
+                      registrationErrors.firstName
+                        ? "border-red-500"
+                        : "border-gray-300"
+                    } outline-none rounded-lg focus:border-green-500 placeholder:text-gray-500 transition-colors duration-150`}
+                    placeholder="Enter first name"
+                    disabled={isRegistering}
+                  />
+                  {registrationErrors.firstName && (
+                    <span className="text-xs text-red-500">
+                      {registrationErrors.firstName}
+                    </span>
+                  )}
+                </div>
+
+                {/* Last Name */}
+                <div className="col-span-2 sm:col-span-1 flex flex-col gap-1">
+                  <label className="text-xs sm:text-sm text-gray-500">
+                    Last Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="lastName"
+                    value={registrationFormData.lastName}
+                    onChange={handleRegistrationChange}
+                    className={`px-3 sm:px-4 py-2 w-full border ${
+                      registrationErrors.lastName
+                        ? "border-red-500"
+                        : "border-gray-300"
+                    } outline-none rounded-lg focus:border-green-500 placeholder:text-gray-500 transition-colors duration-150`}
+                    placeholder="Enter last name"
+                    disabled={isRegistering}
+                  />
+                  {registrationErrors.lastName && (
+                    <span className="text-xs text-red-500">
+                      {registrationErrors.lastName}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Email */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs sm:text-sm text-gray-500">
+                  Email <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  name="email"
+                  value={registrationFormData.email}
+                  onChange={handleRegistrationChange}
+                  className={`px-3 sm:px-4 py-2 w-full border ${
+                    registrationErrors.email
+                      ? "border-red-500"
+                      : "border-gray-300"
+                  } outline-none rounded-lg focus:border-green-500 placeholder:text-gray-500 transition-colors duration-150`}
+                  placeholder="Enter email address"
+                  disabled={isRegistering}
+                />
+                {registrationErrors.email && (
+                  <span className="text-xs text-red-500">
+                    {registrationErrors.email}
+                  </span>
+                )}
+              </div>
+
+              {/* Phone Number */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs sm:text-sm text-gray-500">
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  name="phone"
+                  value={registrationFormData.phone}
+                  onChange={handleRegistrationChange}
+                  className={`px-3 sm:px-4 py-2 w-full border ${
+                    registrationErrors.phone
+                      ? "border-red-500"
+                      : "border-gray-300"
+                  } outline-none rounded-lg focus:border-green-500 placeholder:text-gray-500 transition-colors duration-150`}
+                  placeholder="09XXXXXXXXX"
+                  disabled={isRegistering}
+                />
+                {registrationErrors.phone && (
+                  <span className="text-xs text-red-500">
+                    {registrationErrors.phone}
+                  </span>
+                )}
+              </div>
+
+              {/* Date of Birth */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs sm:text-sm text-gray-500">
+                  Date of Birth
+                </label>
+                <input
+                  type="date"
+                  name="birthday"
+                  value={registrationFormData.birthday}
+                  onChange={handleRegistrationChange}
+                  className="px-3 sm:px-4 py-2 w-full border border-gray-300 outline-none rounded-lg focus:border-green-500 placeholder:text-gray-500 transition-colors duration-150"
+                  disabled={isRegistering}
+                />
+              </div>
+
+              {/* Address */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs sm:text-sm text-gray-500">Address</label>
+                <textarea
+                  name="address"
+                  value={registrationFormData.address}
+                  onChange={handleRegistrationChange}
+                  rows={3}
+                  className="px-3 sm:px-4 py-2 w-full border border-gray-300 outline-none rounded-lg focus:border-green-500 placeholder:text-gray-500 transition-colors duration-150"
+                  placeholder="Enter address"
+                  disabled={isRegistering}
+                />
+              </div>
+
+              {/* Password */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs sm:text-sm text-gray-500">
+                  Password <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  name="password"
+                  value={registrationFormData.password}
+                  onChange={handleRegistrationChange}
+                  className={`px-3 sm:px-4 py-2 w-full border ${
+                    registrationErrors.password
+                      ? "border-red-500"
+                      : "border-gray-300"
+                  } outline-none rounded-lg focus:border-green-500 placeholder:text-gray-500 transition-colors duration-150`}
+                  placeholder="At least 8 characters"
+                  disabled={isRegistering}
+                />
+                {registrationErrors.password && (
+                  <span className="text-xs text-red-500">
+                    {registrationErrors.password}
+                  </span>
+                )}
+              </div>
+
+              {/* Confirm Password */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs sm:text-sm text-gray-500">
+                  Confirm Password <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  name="confirmPassword"
+                  value={registrationFormData.confirmPassword}
+                  onChange={handleRegistrationChange}
+                  className={`px-3 sm:px-4 py-2 w-full border ${
+                    registrationErrors.confirmPassword
+                      ? "border-red-500"
+                      : "border-gray-300"
+                  } outline-none rounded-lg focus:border-green-500 placeholder:text-gray-500 transition-colors duration-150`}
+                  placeholder="Re-enter password"
+                  disabled={isRegistering}
+                />
+                {registrationErrors.confirmPassword && (
+                  <span className="text-xs text-red-500">
+                    {registrationErrors.confirmPassword}
+                  </span>
+                )}
+              </div>
+
+              {/* Buttons */}
+              <div className="flex gap-2 items-center justify-end w-full mt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isRegistering) {
+                      setIsRegistrationFormOpening(false);
+                      setIsRegistrationFormClosing(true);
+                      setTimeout(() => {
+                        setShowRegistrationForm(false);
+                        setIsRegistrationFormClosing(false);
+                        setRegistrationFormData({
+                          firstName: "",
+                          lastName: "",
+                          email: "",
+                          password: "",
+                          confirmPassword: "",
+                          phone: "",
+                          birthday: "",
+                          address: "",
+                        });
+                        setRegistrationErrors({});
+                        setRegistrationMessage({ type: null, text: null });
+                      }, 300);
+                    }
+                  }}
+                  disabled={isRegistering}
+                  className="bg-red-500 text-white rounded-lg px-4 py-2 hover:bg-red-500/90 active:bg-red-600 transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Discard
+                </button>
+
+                <button 
+                  type="submit"
+                  disabled={isRegistering}
+                  className="bg-green-500 text-white rounded-lg px-4 py-2 hover:bg-green-500/90 active:bg-green-600 transition-colors duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isRegistering ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      <span>Registering...</span>
+                    </>
+                  ) : (
+                    "Confirm"
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
       )}
     </div>
   );
