@@ -16,6 +16,7 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  Radio,
 } from "lucide-react";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -79,6 +80,12 @@ export default function AdminNavbar() {
       name: "Package Transactions",
       icon: Archive,
       href: "/admin/transactions",
+    },
+    {
+      id: 5,
+      name: "Scan NFC",
+      icon: Radio,
+      href: "/admin/scan-nfc",
     },
   ];
   const settingsItems = [

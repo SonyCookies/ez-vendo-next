@@ -620,7 +620,7 @@ export default function TopupTransactions() {
               {getTitleText()}
             </span>
             <span className="text-xs text-gray-600">
-              As of {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+              As of {new Date().toLocatheleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
             </span>
           </div>
         </div>

@@ -20,6 +20,7 @@ const PATHTITLES = {
   "/admin/billing": "Billing Configuration",
   "/admin/transactions": "Package Transaction",
   "/admin/configuration": "Configuration",
+  "/admin/scan-nfc": "Scan NFC",
 };
 
 export default function AdminDesktopNavbar() {
