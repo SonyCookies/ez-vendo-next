@@ -1022,13 +1022,13 @@ export default function TopUpRequests() {
         <div className="flex flex-col gap-4">
           {/* Search Bar Skeleton */}
           <form className="flex">
-            <div className="flex flex-col gap-1 w-full">
+          <div className="flex flex-col gap-1 w-full">
               <div className="flex items-center justify-between mt-2">
-                <div className="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
+            <div className="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
                 <div className="h-8 w-24 bg-gray-200 rounded-lg animate-pulse"></div>
               </div>
-              <div className="h-12 w-full bg-gray-200 rounded-lg animate-pulse"></div>
-            </div>
+            <div className="h-12 w-full bg-gray-200 rounded-lg animate-pulse"></div>
+          </div>
           </form>
 
           {/* Sort Filters Skeleton */}
@@ -1222,8 +1222,8 @@ export default function TopUpRequests() {
             <div className="flex flex-col gap-1 w-full">
               <div className="flex items-center justify-between mt-2">
                 <label className="text-xs sm:text-sm font-semibold text-gray-500">
-                  Search users
-                </label>
+                Search users
+              </label>
                 <button
                   type="button"
                   onClick={() => openNfcModal("pending")}
@@ -1475,8 +1475,8 @@ export default function TopUpRequests() {
             <div className="flex flex-col gap-1 w-full">
               <div className="flex items-center justify-between mt-2">
                 <label className="text-xs sm:text-sm font-semibold text-gray-500">
-                  Search history
-                </label>
+                Search history
+              </label>
                 <button
                   type="button"
                   onClick={() => openNfcModal("history")}
@@ -1865,14 +1865,14 @@ export default function TopUpRequests() {
 
                   {/* Reference Number - Only show if payment method is not Cash */}
                   {selectedRequest.paymentMethod?.toLowerCase() !== "cash" && (
-                    <div className="col-span-2 flex flex-col p-2.5 sm:p-3 rounded-lg border border-gray-300">
-                      <span className="text-gray-500 text-xs mb-0.5">
-                        Reference Number
-                      </span>
-                      <span className="font-semibold text-xs sm:text-sm break-all">
-                        {selectedRequest.referenceNumber}
-                      </span>
-                    </div>
+                  <div className="col-span-2 flex flex-col p-2.5 sm:p-3 rounded-lg border border-gray-300">
+                    <span className="text-gray-500 text-xs mb-0.5">
+                      Reference Number
+                    </span>
+                    <span className="font-semibold text-xs sm:text-sm break-all">
+                      {selectedRequest.referenceNumber}
+                    </span>
+                  </div>
                   )}
 
                   <div className="col-span-2 flex flex-col rounded-lg gap-2">

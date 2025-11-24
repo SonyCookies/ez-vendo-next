@@ -93,13 +93,26 @@ export default function Home() {
             >
               Technology
             </a>
+            <a
+              href="/login"
+              className="text-sm text-gray-600 hover:text-emerald-600 transition-colors"
+            >
+              Login
+            </a>
           </div>
 
-          <a href="#cta">
-            <button className="px-6 py-2 rounded-full bg-linear-to-r from-emerald-600 to-emerald-500 text-white text-sm font-semibold hover:shadow-lg hover:shadow-emerald-500/30 transform hover:-translate-y-0.5 transition-all duration-150 cursor-pointer">
-              Get Started
-            </button>
-          </a>
+          <div className="flex items-center gap-2 sm:gap-4">
+            <a href="/login" className="block">
+              <button className="px-4 sm:px-6 py-2 rounded-full border-2 border-emerald-600 text-emerald-600 text-xs sm:text-sm font-semibold hover:bg-emerald-50 transition-all duration-150 cursor-pointer">
+                Login
+              </button>
+            </a>
+            <a href="#cta" className="hidden sm:block">
+              <button className="px-6 py-2 rounded-full bg-linear-to-r from-emerald-600 to-emerald-500 text-white text-sm font-semibold hover:shadow-lg hover:shadow-emerald-500/30 transform hover:-translate-y-0.5 transition-all duration-150 cursor-pointer">
+                Get Started
+              </button>
+            </a>
+          </div>
         </div>
       </nav>
 

@@ -296,7 +296,7 @@ export default function AdminDashboard() {
             labels: ["Pending", "Approved", "Rejected"],
             datasets: [{
               data: [pending, approved, rejected],
-              borderWidth: 1,
+        borderWidth: 1,
               backgroundColor: [
                 "#F59E0B", // Yellow for pending
                 "#10B981", // Green for approved
@@ -407,14 +407,14 @@ export default function AdminDashboard() {
             datasets: [{
               label: "Revenue",
               data: Object.values(revenueByMethod),
-              borderWidth: 1,
-              backgroundColor: [
-                "#3B82F6", // Blue
+        borderWidth: 1,
+        backgroundColor: [
+          "#3B82F6", // Blue
                 "#10B981", // Green
                 "#F59E0B", // Yellow/Orange
                 "#8B5CF6", // Purple
-                "#EF4444", // Red
-              ],
+          "#EF4444", // Red
+        ],
               borderColor: "#ffffff",
             }],
           });
@@ -1133,7 +1133,7 @@ export default function AdminDashboard() {
         </div>
         <div className="absolute top-1/2 right-3 -translate-y-1/2 rounded-full p-3 bg-green-600/40">
           <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-green-700/50"></div>
-        </div>
+      </div>
       </div>
 
       {activeTab === "summary" && (
@@ -1219,8 +1219,8 @@ export default function AdminDashboard() {
               >
                 Insights
               </button>
-            </div>
-          </div>
+                </div>
+              </div>
 
           {/* Content */}
           <div className="flex flex-col xl:flex-1 gap-4 relative">
@@ -1242,17 +1242,17 @@ export default function AdminDashboard() {
                 <div className="flex flex-1 flex-col gap-1.5 sm:gap-2">
                   <span className="text-xl sm:text-2xl xl:text-3xl font-bold">
                     Dashboard
-                  </span>
+                </span>
                   <div className="flex flex-col">
                     <span className="text-xs sm:text-sm xl:text-base font-semibold text-white/90">
                       System Overview
                     </span>
-                  </div>
                 </div>
+              </div>
                 <div className="absolute top-1/2 right-3 sm:right-4 -translate-y-1/2 rounded-full p-2.5 sm:p-3 bg-green-600/40 shadow-lg">
                   <WifiHigh className="size-5 sm:size-6 xl:size-7" />
                 </div>
-              </div>
+            </div>
 
               {/* Tab Content */}
               {activeTab === "summary" && (
@@ -1262,8 +1262,8 @@ export default function AdminDashboard() {
                     <div className="flex items-center justify-between">
                       <span className="text-xs sm:text-sm font-semibold text-gray-700">
                         Summary Cards
-                      </span>
-                    </div>
+                </span>
+                </div>
 
                     {/* Summary Cards Grid */}
                     <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
@@ -1280,71 +1280,71 @@ export default function AdminDashboard() {
                             <span className="text-[10px] sm:text-xs text-gray-100/90">
                               As of {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
                             </span>
-                          </div>
-                        </div>
+              </div>
+            </div>
                         <div className="absolute top-1/2 right-2 sm:right-3 -translate-y-1/2 rounded-full p-2 sm:p-2.5 bg-green-600/40 shadow-lg">
                           <Users className="size-5 sm:size-6 xl:size-7" />
                         </div>
-                      </div>
+          </div>
 
                       {/* Total Revenue Today */}
                       <div className="col-span-2 sm:col-span-1 lg:col-span-1 flex relative rounded-2xl bg-gradient-to-r from-blue-500 via-blue-400 to-blue-500 p-4 sm:p-5 text-white shadow-md hover:shadow-lg transition-shadow duration-200">
                         <div className="flex flex-1 flex-col gap-1.5 sm:gap-2">
                           <span className="text-xl sm:text-2xl xl:text-3xl font-bold">
                             ₱{totalRevenueToday.toFixed(2)}
-                          </span>
+                </span>
                           <div className="flex flex-col gap-0.5">
                             <span className="text-xs sm:text-sm xl:text-base font-semibold text-white">
                               Revenue Today
-                            </span>
+                  </span>
                             <span className="text-[10px] sm:text-xs text-gray-100/90">
                               As of {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-                            </span>
-                          </div>
-                        </div>
+                  </span>
+                </div>
+              </div>
                         <div className="absolute top-1/2 right-2 sm:right-3 -translate-y-1/2 rounded-full p-2 sm:p-2.5 bg-blue-600/40 shadow-lg">
                           <DollarSign className="size-5 sm:size-6 xl:size-7" />
-                        </div>
-                      </div>
+              </div>
+            </div>
 
                       {/* Pending Top-up Requests */}
                       <div className="col-span-2 sm:col-span-1 lg:col-span-1 flex relative rounded-2xl bg-gradient-to-r from-yellow-500 via-yellow-400 to-yellow-500 p-4 sm:p-5 text-white shadow-md hover:shadow-lg transition-shadow duration-200">
                         <div className="flex flex-1 flex-col gap-1.5 sm:gap-2">
                           <span className="text-xl sm:text-2xl xl:text-3xl font-bold">
                             {pendingTopUpRequests}
-                          </span>
+                </span>
                           <div className="flex flex-col gap-0.5">
                             <span className="text-xs sm:text-sm xl:text-base font-semibold text-white">
                               Pending Requests
-                            </span>
+                  </span>
                             <span className="text-[10px] sm:text-xs text-gray-100/90">
                               As of {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-                            </span>
-                          </div>
-                        </div>
+                  </span>
+                </div>
+              </div>
                         <div className="absolute top-1/2 right-2 sm:right-3 -translate-y-1/2 rounded-full p-2 sm:p-2.5 bg-yellow-600/40 shadow-lg">
                           <BanknoteArrowUp className="size-5 sm:size-6 xl:size-7" />
-                        </div>
-                      </div>
+              </div>
+            </div>
 
                       {/* Active Sessions */}
                       <div className="col-span-2 sm:col-span-1 lg:col-span-1 flex relative rounded-2xl bg-gradient-to-r from-purple-500 via-purple-400 to-purple-500 p-4 sm:p-5 text-white shadow-md hover:shadow-lg transition-shadow duration-200">
                         <div className="flex flex-1 flex-col gap-1.5 sm:gap-2">
                           <span className="text-xl sm:text-2xl xl:text-3xl font-bold">
                             {activeSessions}
-                          </span>
+                  </span>
                           <div className="flex flex-col gap-0.5">
                             <span className="text-xs sm:text-sm xl:text-base font-semibold text-white">
                               Active Sessions
                             </span>
                             <span className="text-[10px] sm:text-xs text-gray-100/90">
                               As of {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-                            </span>
-                          </div>
-                        </div>
+                  </span>
+                </div>
+              </div>
                         <div className="absolute top-1/2 right-2 sm:right-3 -translate-y-1/2 rounded-full p-2 sm:p-2.5 bg-purple-600/40 shadow-lg">
                           <Wifi className="size-5 sm:size-6 xl:size-7" />
-                        </div>
+              </div>
                       </div>
 
                       {/* Total Transactions Today */}
@@ -1364,8 +1364,8 @@ export default function AdminDashboard() {
                         </div>
                         <div className="absolute top-1/2 right-2 sm:right-3 -translate-y-1/2 rounded-full p-2 sm:p-2.5 bg-indigo-600/40 shadow-lg">
                           <ReceiptText className="size-5 sm:size-6 xl:size-7" />
-                        </div>
-                      </div>
+            </div>
+          </div>
 
                       {/* Total Manual Top-ups Today */}
                       <div className="col-span-2 sm:col-span-1 lg:col-span-1 flex relative rounded-2xl bg-gradient-to-r from-teal-500 via-teal-400 to-teal-500 p-4 sm:p-5 text-white shadow-md hover:shadow-lg transition-shadow duration-200">
@@ -1379,12 +1379,12 @@ export default function AdminDashboard() {
                             </span>
                             <span className="text-[10px] sm:text-xs text-gray-100/90">
                               As of {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
-                            </span>
-                          </div>
-                        </div>
+                  </span>
+                </div>
+                </div>
                         <div className="absolute top-1/2 right-2 sm:right-3 -translate-y-1/2 rounded-full p-2 sm:p-2.5 bg-teal-600/40 shadow-lg">
                           <Clock className="size-5 sm:size-6 xl:size-7" />
-                        </div>
+              </div>
                       </div>
                     </div>
                   </div>
@@ -1426,7 +1426,7 @@ export default function AdminDashboard() {
                           >
                             30 Days
                           </button>
-                        </div>
+                      </div>
                       </div>
                       {revenueTrendData ? (
                         <div className="w-full h-56 sm:h-64 xl:h-72">
@@ -1478,7 +1478,7 @@ export default function AdminDashboard() {
                           >
                             30 Days
                           </button>
-                        </div>
+                      </div>
                       </div>
                       {userRegistrationsData ? (
                         <div className="w-full h-56 sm:h-64 xl:h-72">
@@ -1663,9 +1663,9 @@ export default function AdminDashboard() {
                                   <span><span className="font-medium">User:</span> {tx.userName}</span>
                                   <span><span className="font-medium">Amount:</span> ₱{tx.amount.toFixed(2)}</span>
                                   <span><span className="font-medium">Date:</span> {formatDateTime(tx.date)}</span>
-                                </div>
-                              </div>
-                            ))}
+                    </div>
+                  </div>
+                ))}
                           </div>
                           {/* Desktop View */}
                           <div className="hidden xl:flex rounded-xl overflow-hidden border border-gray-300 w-full bg-white">
@@ -1704,7 +1704,7 @@ export default function AdminDashboard() {
                           </div>
                         </>
                       )}
-                    </div>
+              </div>
 
                     {/* Recent Top-up Requests */}
                     <div className="flex flex-col gap-2 p-3 sm:p-4 xl:p-5 rounded-2xl border border-gray-300 bg-white shadow-sm">
@@ -1748,8 +1748,8 @@ export default function AdminDashboard() {
                                     <th className="px-4 xl:px-6 py-3 font-semibold text-gray-700">Amount</th>
                                     <th className="px-4 xl:px-6 py-3 font-semibold text-gray-700">Payment Method</th>
                                     <th className="px-4 xl:px-6 py-3 font-semibold text-gray-700">Date</th>
-                                  </tr>
-                                </thead>
+                      </tr>
+                    </thead>
                                 <tbody>
                                   {recentTopUpRequests.map((req) => (
                                     <tr key={req.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150">
@@ -1809,7 +1809,7 @@ export default function AdminDashboard() {
                                     <th className="px-4 xl:px-6 py-3 font-semibold text-gray-700">End Time</th>
                                   </tr>
                                 </thead>
-                                <tbody>
+                    <tbody>
                                   {recentSessions.map((session) => (
                                     <tr key={session.id} className="border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150">
                                       <td className="px-4 xl:px-6 py-3 sm:py-4 text-gray-800">{session.userName}</td>
@@ -1820,8 +1820,8 @@ export default function AdminDashboard() {
                                   ))}
                                 </tbody>
                               </table>
+                              </div>
                             </div>
-                          </div>
                         </>
                       )}
                     </div>
@@ -1872,16 +1872,16 @@ export default function AdminDashboard() {
                                       <td className="px-4 xl:px-6 py-3 sm:py-4 text-gray-800">{user.name}</td>
                                       <td className="px-4 xl:px-6 py-3 sm:py-4 text-gray-800 font-mono text-xs">{user.rfid}</td>
                                       <td className="px-4 xl:px-6 py-3 sm:py-4 text-gray-600">{formatDateTime(user.registrationDate)}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                             </div>
                           </div>
                         </>
-                      )}
-                    </div>
-                  </div>
+                )}
+              </div>
+            </div>
                 </>
               )}
 
@@ -1892,8 +1892,8 @@ export default function AdminDashboard() {
                     <div className="flex items-center justify-between">
                       <span className="text-xs sm:text-sm font-semibold text-gray-700">
                         Additional Insights
-                      </span>
-                    </div>
+                  </span>
+                </div>
 
                     {/* Average Session Duration */}
                     <div className="flex flex-col gap-2 p-3 sm:p-4 xl:p-5 rounded-2xl border border-gray-300 bg-white shadow-sm">
@@ -1902,23 +1902,23 @@ export default function AdminDashboard() {
                         <div className="w-full flex flex-col items-center justify-center py-8 sm:py-12 gap-2">
                           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
                           <span className="text-xs sm:text-sm text-gray-500">Loading...</span>
-                        </div>
+                </div>
                       ) : (
                         <div className="flex items-center gap-3 sm:gap-4 py-3 sm:py-4">
                           <div className="flex items-center justify-center p-3 sm:p-4 rounded-full bg-purple-100 shadow-sm">
                             <Clock className="size-5 sm:size-6 xl:size-7 text-purple-600" />
-                          </div>
+              </div>
                           <div className="flex flex-col gap-0.5">
                             <span className="text-xl sm:text-2xl xl:text-3xl font-bold text-gray-800">
                               {formatDuration(averageSessionDuration)}
                             </span>
-                            <span className="text-xs sm:text-sm text-gray-500">
+                        <span className="text-xs sm:text-sm text-gray-500">
                               Average time per session
-                            </span>
-                          </div>
+                        </span>
+                      </div>
                         </div>
                       )}
-                    </div>
+                      </div>
 
                     {/* Most Active Users */}
                     <div className="flex flex-col gap-2 p-3 sm:p-4 xl:p-5 rounded-2xl border border-gray-300 bg-white shadow-sm">
@@ -1927,12 +1927,12 @@ export default function AdminDashboard() {
                         <div className="w-full flex flex-col items-center justify-center py-8 sm:py-12 gap-2">
                           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
                           <span className="text-xs sm:text-sm text-gray-500">Loading...</span>
-                        </div>
+                    </div>
                       ) : mostActiveUsers.length === 0 ? (
                         <div className="w-full flex flex-col items-center justify-center py-8 sm:py-12 gap-2">
                           <ArchiveX className="size-10 sm:size-12 text-gray-300" />
                           <span className="text-xs sm:text-sm text-gray-500">No active users available</span>
-                        </div>
+                      </div>
                       ) : (
                         <>
                           {/* Mobile View */}
@@ -1947,10 +1947,10 @@ export default function AdminDashboard() {
                                     <span className="font-semibold text-xs sm:text-sm text-gray-800">{user.userName}</span>
                                     <span className="text-[10px] sm:text-xs text-gray-600">{formatDuration(user.totalDuration)}</span>
                                   </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
                           {/* Desktop View */}
                           <div className="hidden xl:flex rounded-xl overflow-hidden border border-gray-300 w-full bg-white">
                             <div className="overflow-x-auto w-full">
@@ -1960,27 +1960,27 @@ export default function AdminDashboard() {
                                     <th className="px-4 xl:px-6 py-3 font-semibold text-gray-700">Rank</th>
                                     <th className="px-4 xl:px-6 py-3 font-semibold text-gray-700">User</th>
                                     <th className="px-4 xl:px-6 py-3 font-semibold text-gray-700">Total Session Time</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
+                      </tr>
+                    </thead>
+                    <tbody>
                                   {mostActiveUsers.map((user, index) => (
                                     <tr key={user.userId} className="border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150">
                                       <td className="px-4 xl:px-6 py-3 sm:py-4">
                                         <div className="flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-700 font-bold text-sm shadow-sm">
                                           {index + 1}
-                                        </div>
-                                      </td>
+                            </div>
+                          </td>
                                       <td className="px-4 xl:px-6 py-3 sm:py-4 text-gray-800">{user.userName}</td>
                                       <td className="px-4 xl:px-6 py-3 sm:py-4 text-gray-800 font-medium">{formatDuration(user.totalDuration)}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                             </div>
                           </div>
                         </>
-                      )}
-                    </div>
+                )}
+              </div>
 
                     {/* Peak Usage Hours */}
                     <div className="flex flex-col gap-2 p-3 sm:p-4 xl:p-5 rounded-2xl border border-gray-300 bg-white shadow-sm">
@@ -1989,7 +1989,7 @@ export default function AdminDashboard() {
                         <div className="w-full flex flex-col items-center justify-center py-8 sm:py-12 gap-2">
                           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
                           <span className="text-xs sm:text-sm text-gray-500">Loading...</span>
-                        </div>
+            </div>
                       ) : peakUsageHours ? (
                         <div className="w-full h-56 sm:h-64 xl:h-72">
                           <Line
@@ -2006,12 +2006,12 @@ export default function AdminDashboard() {
                               },
                             }}
                           />
-                        </div>
+          </div>
                       ) : (
                         <div className="w-full h-56 sm:h-64 xl:h-72 flex flex-col items-center justify-center text-gray-400 gap-2">
                           <ArchiveX className="size-8 sm:size-10 text-gray-300" />
                           <span className="text-xs sm:text-sm">No data available</span>
-                        </div>
+        </div>
                       )}
                     </div>
 

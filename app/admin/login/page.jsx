@@ -1,8 +1,9 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { auth, onAuthStateChanged } from "../../../firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth, db, onAuthStateChanged } from "../../../firebase";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import { LogIn, Mail, Lock, CircleAlert, CircleCheckBig } from "lucide-react";
 
 export default function AdminLogin() {
@@ -13,12 +14,27 @@ export default function AdminLogin() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated and is an admin
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // User is already logged in, redirect to dashboard
-        router.replace("/admin/dashboard");
+        // Check if user is an admin
+        try {
+          const adminDocRef = doc(db, "admins", user.uid);
+          const adminDocSnap = await getDoc(adminDocRef);
+          
+          if (adminDocSnap.exists()) {
+            // User is an admin, redirect to admin dashboard
+            router.replace("/admin/dashboard");
+          } else {
+            // User is authenticated but not an admin, redirect to user dashboard
+            router.replace("/dashboard");
+          }
+        } catch (error) {
+          console.error("Error checking admin status:", error);
+          // On error, redirect to user dashboard
+          router.replace("/dashboard");
+        }
       }
     });
 
@@ -40,9 +56,23 @@ export default function AdminLogin() {
     }
     setLoading(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      setSuccess(true);
-      router.replace("/admin/dashboard");
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      
+      // Check if user is an admin
+      const adminDocRef = doc(db, "admins", user.uid);
+      const adminDocSnap = await getDoc(adminDocRef);
+      
+      if (adminDocSnap.exists()) {
+        // User is an admin
+        setSuccess(true);
+        router.replace("/admin/dashboard");
+      } else {
+        // User is authenticated but not an admin
+        setError("Access denied. This account is not an admin.");
+        // Sign out the user since they shouldn't be logged in
+        await signOut(auth);
+      }
     } catch (err) {
       const code = err.code || "auth/error";
       let message = "Failed to sign in";

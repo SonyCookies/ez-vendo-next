@@ -804,13 +804,13 @@ export default function ManualTopUp() {
       <div className="flex flex-col gap-4">
         {/* Search Bar Skeleton */}
         <form className="flex">
-          <div className="flex flex-col gap-1 w-full">
+        <div className="flex flex-col gap-1 w-full">
             <div className="flex items-center justify-between mt-4">
-              <div className="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
+          <div className="h-4 w-24 bg-gray-200 rounded animate-pulse"></div>
               <div className="h-8 w-24 bg-gray-200 rounded-lg animate-pulse"></div>
             </div>
-            <div className="h-12 w-full bg-gray-200 rounded-lg animate-pulse"></div>
-          </div>
+          <div className="h-12 w-full bg-gray-200 rounded-lg animate-pulse"></div>
+        </div>
         </form>
 
         {/* Search Results Cards Skeleton */}
@@ -898,8 +898,8 @@ export default function ManualTopUp() {
                 <div className="flex flex-col gap-1 w-full">
                   <div className="flex items-center justify-between mt-4">
                     <label className="text-xs sm:text-sm font-semibold text-gray-500">
-                      Search users
-                    </label>
+                    Search users
+                  </label>
                     <button
                       type="button"
                       onClick={openNfcModal}
