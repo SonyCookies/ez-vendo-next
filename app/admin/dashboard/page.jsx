@@ -1181,40 +1181,40 @@ export default function AdminDashboard() {
             <div className="flex xl:flex-col items-center gap-2 min-w-max xl:min-w-0">
               <button
                 onClick={() => setActiveTab("summary")}
-                className={`rounded-lg cursor-pointer px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-medium transition-all duration-150 flex-shrink-0 xl:w-full ${
+                className={`rounded-lg cursor-pointer px-4 py-3 transition-colors duration-150 flex-shrink-0 xl:w-full ${
                   activeTab === "summary"
-                    ? "border border-green-500 bg-green-500 text-white shadow-md"
-                    : "border border-gray-300 text-gray-800 hover:bg-gray-100 active:bg-gray-200"
+                    ? "border border-green-500 bg-green-500 text-white"
+                    : "border border-gray-300 text-gray-800 hover:bg-gray-100"
                 }`}
               >
                 Summary
               </button>
               <button
                 onClick={() => setActiveTab("charts")}
-                className={`rounded-lg cursor-pointer px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-medium transition-all duration-150 flex-shrink-0 xl:w-full ${
+                className={`rounded-lg cursor-pointer px-4 py-3 transition-colors duration-150 flex-shrink-0 xl:w-full ${
                   activeTab === "charts"
-                    ? "border border-green-500 bg-green-500 text-white shadow-md"
-                    : "border border-gray-300 text-gray-800 hover:bg-gray-100 active:bg-gray-200"
+                    ? "border border-green-500 bg-green-500 text-white"
+                    : "border border-gray-300 text-gray-800 hover:bg-gray-100"
                 }`}
               >
                 Charts
               </button>
               <button
                 onClick={() => setActiveTab("recent")}
-                className={`rounded-lg cursor-pointer px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-medium transition-all duration-150 flex-shrink-0 xl:w-full ${
+                className={`rounded-lg cursor-pointer px-4 py-3 transition-colors duration-150 flex-shrink-0 xl:w-full ${
                   activeTab === "recent"
-                    ? "border border-green-500 bg-green-500 text-white shadow-md"
-                    : "border border-gray-300 text-gray-800 hover:bg-gray-100 active:bg-gray-200"
+                    ? "border border-green-500 bg-green-500 text-white"
+                    : "border border-gray-300 text-gray-800 hover:bg-gray-100"
                 }`}
               >
                 Recent Activity
               </button>
               <button
                 onClick={() => setActiveTab("insights")}
-                className={`rounded-lg cursor-pointer px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-medium transition-all duration-150 flex-shrink-0 xl:w-full ${
+                className={`rounded-lg cursor-pointer px-4 py-3 transition-colors duration-150 flex-shrink-0 xl:w-full ${
                   activeTab === "insights"
-                    ? "border border-green-500 bg-green-500 text-white shadow-md"
-                    : "border border-gray-300 text-gray-800 hover:bg-gray-100 active:bg-gray-200"
+                    ? "border border-green-500 bg-green-500 text-white"
+                    : "border border-gray-300 text-gray-800 hover:bg-gray-100"
                 }`}
               >
                 Insights
