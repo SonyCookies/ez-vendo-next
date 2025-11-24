@@ -29,6 +29,7 @@ export default function AdminNavbar() {
   const [toggleSidebar, setToggleSidebar] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   
+
   // Initialize collapsed state from localStorage with lazy initialization
   const [isCollapsed, setIsCollapsed] = useState(() => {
     // Only access localStorage on client-side
@@ -48,7 +49,10 @@ export default function AdminNavbar() {
   // Save collapsed state to localStorage when it changes
   useEffect(() => {
     if (typeof window !== "undefined") {
-      localStorage.setItem("adminSidebarCollapsed", JSON.stringify(isCollapsed));
+      localStorage.setItem(
+        "adminSidebarCollapsed",
+        JSON.stringify(isCollapsed)
+      );
     }
   }, [isCollapsed]);
 
@@ -180,9 +184,11 @@ export default function AdminNavbar() {
             </span>
           </div>
           {/* desktop */}
-          <div className={`hidden xl:flex items-center gap-2 transition-all duration-300 ${
-            isCollapsed ? "justify-center w-full" : ""
-          }`}>
+          <div
+            className={`hidden xl:flex items-center gap-2 transition-all duration-300 ${
+              isCollapsed ? "justify-center w-full" : ""
+            }`}
+          >
             <Image
               src="/favicon.ico"
               alt="EZ-Vendo Logo"
@@ -196,7 +202,6 @@ export default function AdminNavbar() {
               </span>
             )}
           </div>
-
         </div>
 
         {/* Collapse Toggle Button - Desktop Only */}
@@ -213,9 +218,11 @@ export default function AdminNavbar() {
         </button>
 
         {/* right (nav items) */}
-        <div className={`hidden lg:flex flex-col w-full gap-5 transition-all duration-300 ${
-          isCollapsed ? "items-center" : ""
-        }`}>
+        <div
+          className={`hidden lg:flex flex-col w-full gap-5 transition-all duration-300 ${
+            isCollapsed ? "items-center" : ""
+          }`}
+        >
           {/* menus */}
           <div className="flex flex-col w-full gap-2">
             {/* suptitle */}
@@ -243,7 +250,7 @@ export default function AdminNavbar() {
                     }`}
                     title={isCollapsed ? name : undefined}
                   >
-                    <Icon className="size-5 sm:size-6 flex-shrink-0" />
+                    <Icon className="size-5 sm:size-6 shrink-0" />
                     {!isCollapsed && (
                       <span className="whitespace-nowrap">{name}</span>
                     )}
@@ -279,7 +286,7 @@ export default function AdminNavbar() {
                     }`}
                     title={isCollapsed ? name : undefined}
                   >
-                    <Icon className="size-5 sm:size-6 flex-shrink-0" />
+                    <Icon className="size-5 sm:size-6 shrink-0" />
                     {!isCollapsed && (
                       <span className="whitespace-nowrap">{name}</span>
                     )}
@@ -294,7 +301,7 @@ export default function AdminNavbar() {
                 }`}
                 title={isCollapsed ? "Sign out" : undefined}
               >
-                <LogOut className="size-5 sm:size-6 flex-shrink-0" />
+                <LogOut className="size-5 sm:size-6 shrink-0" />
                 {!isCollapsed && (
                   <span className="whitespace-nowrap">
                     {isSigningOut ? "Signing out..." : "Sign out"}
@@ -304,7 +311,6 @@ export default function AdminNavbar() {
             </div>
           </div>
         </div>
-
       </div>
 
       {/* sidebar (smooth transition) */}
