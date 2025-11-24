@@ -336,25 +336,26 @@ export default function AllTransactions({ packageFilter = "all" }) {
     }, 300);
   };
 
-  // Find refund transaction ID for a given transaction
-  const findRefundTransactionId = (transactionDocumentId) => {
-    const refundTransaction = transactions.find(
-      (t) => t.refundedTransactionId === transactionDocumentId
-    );
-    return refundTransaction ? refundTransaction.documentId : null;
-  };
+  // Find refund transaction ID for a given transaction - COMMENTED OUT
+  // const findRefundTransactionId = (transactionDocumentId) => {
+  //   const refundTransaction = transactions.find(
+  //     (t) => t.refundedTransactionId === transactionDocumentId
+  //   );
+  //   return refundTransaction ? refundTransaction.documentId : null;
+  // };
 
-  // Handle viewing refund transaction
-  const handleViewRefundTransaction = (transactionDocumentId) => {
-    const refundTransactionId = findRefundTransactionId(transactionDocumentId);
-    if (refundTransactionId) {
-      setSearchQuery(refundTransactionId);
-      setDebouncedQuery(refundTransactionId);
-      closeModal();
-    }
-  };
+  // Handle viewing refund transaction - COMMENTED OUT
+  // const handleViewRefundTransaction = (transactionDocumentId) => {
+  //   const refundTransactionId = findRefundTransactionId(transactionDocumentId);
+  //   if (refundTransactionId) {
+  //     setSearchQuery(refundTransactionId);
+  //     setDebouncedQuery(refundTransactionId);
+  //     closeModal();
+  //   }
+  // };
 
-  // Handle refund
+  // Handle refund - COMMENTED OUT
+  /*
   const handleRefund = async () => {
     if (!selectedTransaction || processing) return;
 
@@ -546,6 +547,7 @@ export default function AllTransactions({ packageFilter = "all" }) {
       setShowErrorModal(true);
     }
   };
+  */
 
   const anyModalOpen = selectedTransaction !== null;
   useEffect(() => {
@@ -1012,8 +1014,8 @@ export default function AllTransactions({ packageFilter = "all" }) {
                 </div>
               </div>
 
-              {/* Refund Button */}
-              {!selectedTransaction.refunded && selectedTransaction.type !== "Refund" && (
+              {/* Refund Button - COMMENTED OUT */}
+              {/* {!selectedTransaction.refunded && selectedTransaction.type !== "Refund" && (
                 <div className="flex gap-2 items-center justify-end w-full mt-2">
                   <button
                     onClick={handleRefund}
@@ -1023,10 +1025,10 @@ export default function AllTransactions({ packageFilter = "all" }) {
                     {processing ? "Processing..." : "Refund"}
                   </button>
                 </div>
-              )}
+              )} */}
 
-              {/* Refunded Badge */}
-              {selectedTransaction.refunded && (
+              {/* Refunded Badge - COMMENTED OUT */}
+              {/* {selectedTransaction.refunded && (
                 <div className="flex items-center justify-center w-full mt-2">
                   <div className="flex flex-col sm:flex-row items-center gap-2 px-4 py-2 rounded-lg bg-blue-100 border border-blue-300">
                     <div className="flex items-center gap-2">
@@ -1044,7 +1046,7 @@ export default function AllTransactions({ packageFilter = "all" }) {
                     )}
                   </div>
                 </div>
-              )}
+              )} */}
             </div>
           </div>
         </div>

@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
+    "dev:https": "node server.js",
+    "generate-cert": "node generate-cert.js",
     "build": "next build --webpack",
     "start": "next start"
   },
@@ -18,6 +20,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4"
+    "tailwindcss": "^4",
+    "selfsigned": "^2.1.1"
   }
 }

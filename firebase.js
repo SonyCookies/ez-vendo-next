@@ -1,6 +1,6 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth, setPersistence, browserLocalPersistence, onAuthStateChanged } from "firebase/auth";
+import { getAuth, setPersistence, browserLocalPersistence, onAuthStateChanged, signOut } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getDatabase } from "firebase/database"; // Realtime Database
@@ -30,5 +30,5 @@ setPersistence(auth, browserLocalPersistence).catch((error) => {
   console.error("Failed to set persistence:", error);
 });
 
-// Export auth, db, and onAuthStateChanged
-export { app, auth, db, storage, realtimeDb, onAuthStateChanged };
+// Export auth, db, onAuthStateChanged, and signOut
+export { app, auth, db, storage, realtimeDb, onAuthStateChanged, signOut };
